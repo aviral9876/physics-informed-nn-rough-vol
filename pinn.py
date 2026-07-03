@@ -77,7 +77,8 @@ class RoughHestonPINN:
     P(tau, x, u). Greeks come from autodiff of the trained P.
     """
     def __init__(self, params, lift, K=1.0, r=0.0, T=1.0,
-                 width=64, depth=4, device="cpu", beta_smooth=40.0):
+                 width=64, depth=4, device="cpu", beta_smooth=40.0,
+                 x_halfwidth=1.2):
         self.p = params
         c, x = lift
         self.c = torch.tensor(c)
@@ -90,8 +91,12 @@ class RoughHestonPINN:
         # network input: (tau, x, u_1..u_n) -> 1
         self.net = MLP(2 + self.n, width, depth, 1).to(device)
 
-        # coordinate ranges for collocation sampling (log-moneyness around ATM)
-        self.x_lo, self.x_hi = np.log(K) - 0.6, np.log(K) + 0.6
+        # coordinate ranges for collocation sampling (log-moneyness around ATM).
+        # Widened to +/-1.2 so the domain edges sit in the ASYMPTOTIC regime
+        # (S ~ 0.30 K deep OTM, S ~ 3.3 K deep ITM) where the boundary
+        # conditions below are essentially exact, while the PDE residual on the
+        # interior connects those anchors to the traded-strike core.
+        self.x_lo, self.x_hi = np.log(K) - x_halfwidth, np.log(K) + x_halfwidth
         self.u_scale = 0.05           # factors start at 0, stay small; sample O(0.05)
 
     # ---- smoothed terminal payoff (call) in log-spot coords ----
@@ -197,7 +202,38 @@ class RoughHestonPINN:
         tau = torch.cat([tau, tau2]); x = torch.cat([x, x2]); u = torch.cat([u, u2])
         return tau, x, u
 
-    def train(self, iters=3000, n_col=2000, n_bnd=500, lr=1e-3, log_every=500):
+    # ---- asymptotic boundary sampling ----
+    def sample_boundary(self, n_bc):
+        """
+        Draw fresh Dirichlet boundary points at the two domain edges, spanning
+        the full (tau, u) range so the anchor holds for every maturity/factor
+        state. Targets are the exact deep-wing asymptotics of a European call:
+            deep OTM  (x = x_lo, S -> 0)   :  P -> 0
+            deep ITM  (x = x_hi, S -> inf) :  P -> S - K e^{-r tau}   (fwd intrinsic)
+        These are the anchors the unconstrained net was missing, which let its
+        tau*N correction grow without bound and blow up in the wings.
+        """
+        dev = self.device
+        tau_l = torch.rand(n_bc, 1, device=dev) * self.T
+        tau_r = torch.rand(n_bc, 1, device=dev) * self.T
+        u_l = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
+        u_r = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
+        x_l = torch.full((n_bc, 1), self.x_lo, device=dev)
+        x_r = torch.full((n_bc, 1), self.x_hi, device=dev)
+        tgt_l = torch.zeros(n_bc, 1, device=dev)
+        S_r = torch.exp(x_r)
+        tgt_r = S_r - self.K * torch.exp(-self.r * tau_r)
+        return (tau_l, x_l, u_l, tgt_l), (tau_r, x_r, u_r, tgt_r)
+
+    def boundary_loss(self, n_bc):
+        """MSE of the net's price against the deep-OTM/ITM asymptotic targets."""
+        (tau_l, x_l, u_l, tgt_l), (tau_r, x_r, u_r, tgt_r) = self.sample_boundary(n_bc)
+        P_l = self.price_ansatz(tau_l, x_l, u_l)
+        P_r = self.price_ansatz(tau_r, x_r, u_r)
+        return ((P_l - tgt_l) ** 2).mean() + ((P_r - tgt_r) ** 2).mean()
+
+    def train(self, iters=3000, n_col=2000, n_bnd=500, n_bc=400, w_bc=0.3,
+              lr=1e-3, log_every=500):
         opt = torch.optim.Adam(self.net.parameters(), lr=lr)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, iters)
         history = []
@@ -205,14 +241,18 @@ class RoughHestonPINN:
             opt.zero_grad()
             tau, x, u = self.sample(n_col, n_bnd)
             res = self.pde_residual(tau, x, u)
-            loss = (res**2).mean()
+            loss_pde = (res**2).mean()
+            loss_bc = self.boundary_loss(n_bc)      # fresh boundary points each iter
+            loss = loss_pde + w_bc * loss_bc
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1.0)
             opt.step(); sched.step()
             if it % log_every == 0 or it == iters-1:
                 lval = float(loss.detach())
                 history.append((it, lval))
-                print(f"  iter {it:5d}  PDE loss {lval:.3e}")
+                print(f"  iter {it:5d}  loss {lval:.3e}  "
+                      f"(PDE {float(loss_pde.detach()):.3e}  "
+                      f"BC {float(loss_bc.detach()):.3e})")
         return history
 
     # ---- inference ----

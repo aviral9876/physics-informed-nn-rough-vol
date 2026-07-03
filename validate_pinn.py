@@ -31,10 +31,18 @@ def evaluate(params, H, n_factors, K=1.0, r=0.0, T=1.0,
     hist = pinn.train(iters=train_iters, n_col=2000, n_bnd=500, log_every=1000)
 
     strikes = np.array([0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15])
-    # ground truth
+    # ground truth: Fourier call at spot S0=1 across strikes.
     fpx = np.atleast_1d(price_european_fourier(1.0, strikes, T, r, params, H,
                                                N=300, u_max=120, n_u=1500))
-    ppx = pinn.price(strikes, tau=T)
+    # The PINN is trained with strike fixed at K=1 and prices as a function of
+    # SPOT, so pinn.price(s) = C(spot=s, K=1). To read off the fixed-spot smile
+    # C(S0=1, K) we must use the call's degree-1 homogeneity,
+    #     C(S0, K) = K * C(S0/K, 1)   =>   C(1, K) = K * C(1/K, 1),
+    # which holds for rough Heston (variance dynamics are independent of the
+    # spot level). Comparing pinn.price(strikes) directly against fpx instead
+    # compares MISMATCHED options and manufactures thousands of bp of spurious
+    # error, so the homogeneity rescaling is essential for a valid comparison.
+    ppx = strikes * pinn.price(1.0 / strikes, tau=T)
 
     iv_f = np.array([implied_vol(fpx[i], 1.0, strikes[i], T, r, "C")
                      for i in range(len(strikes))])
