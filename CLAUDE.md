@@ -1,0 +1,114 @@
+# CLAUDE.md — Project context for Claude Code
+
+This file is auto-loaded by Claude Code. It tells you (Claude) the state of this
+project, what is trusted, what is broken, and what to work on. Read it fully
+before touching code.
+
+## What this project is
+
+A research pipeline for the thesis **"Physics-Informed Neural Networks for
+Option Pricing Under Rough Volatility."** It goes end to end:
+
+    Deribit BTC options  ->  IV surface  ->  rough Heston calibration
+      ->  PINN pricing on the lifted PDE  ->  validation vs Fourier/MC truth
+
+Rough volatility = the model where volatility follows fractional Brownian motion
+with Hurst H < 0.5, so it is NON-Markovian and has no finite-dimensional pricing
+PDE. We handle that with the **Markovian lift** (approximate the fractional
+kernel by a sum of n exponentials), which yields an (n+1)-dimensional Markovian
+PDE that the PINN can solve.
+
+## File map
+
+    data_deribit.py        Deribit fetcher (public REST, no key). PRIMARY data source.
+    data_nse.py            NSE fetcher. DEPRECATED (NSE blocks scrapers). Keep for ref.
+    surface.py             Clean chain -> vega-weighted IV surface. Robust BS IV inverter.
+    rough_heston_lift.py   Markovian lift: kernel ~ sum of exponentials. VALIDATED.
+    rough_heston_fourier.py Ground-truth pricer A: fractional Riccati + Lewis. VALIDATED.
+    lifted_mc.py           Ground-truth pricer B: lifted-SDE Monte Carlo. VALIDATED.
+    calibrate.py           Fit rough Heston to the surface (Fourier in the loop).
+    pinn.py                THE PINN. Solves the lifted PDE. *** NOT YET ACCURATE ***
+    validate_pinn.py       PINN vs Fourier comparison + figures.
+    run_all.py             Orchestrator: data -> ... -> figures.
+    data/deribit_chain.csv Real BTC data (912 rows) already pulled. USE THIS.
+    calib_real.json        Calibrated params on real BTC (H=0.044, rho=-0.94).
+
+## Trust map — READ THIS BEFORE RELYING ON ANYTHING
+
+VALIDATED (safe to build on):
+- Markovian lift: rel L2 kernel error 26% (n=5) -> 0.4% (n=100), monotone.
+- Fourier pricer: matches Black-Scholes to ~4e-7 in the flat-vol limit.
+- MC pricer: matches BS within MC error; agrees with Fourier on genuine rough
+  Heston to within Euler bias (shrinks as steps increase). The two pricers are
+  INDEPENDENT (one approximates only an ODE, the other the model+dynamics), so
+  their agreement is a real cross-check. THESE ARE YOUR GROUND TRUTH.
+- Data + surface + calibration: run end to end on real BTC. Calibration gives
+  economically sensible params but a COARSE fit (628 vol bp) due to lean budget.
+
+BROKEN / INCOMPLETE (do not trust results yet):
+- pinn.py. It trains and is ATM-accurate but its price surface collapses to
+  "BS-baseline + near-linear" and BLOWS UP IN THE WINGS; training loss is
+  unstable (oscillates ~1e-3 to 9e-2). IV RMSE vs Fourier ~ thousands of bp.
+  Fixing this is the core task (see PRIORITY WORK below).
+
+## Two hard-won implementation facts (do not regress these)
+
+1. STIFFNESS. The lifted mean-reversions x_i span ~10 orders of magnitude for
+   H~0.04-0.1. Naive explicit Euler/RK4 on the factor ODEs -> NaN. Both the
+   Fourier Riccati solver and the MC simulator use an EXPONENTIAL-INTEGRATOR
+   (integrating-factor) scheme that handles the -x_i term exactly. If you touch
+   those solvers, keep the exponential integrator.
+
+2. KERNEL NODE RANGE. The geometric node grid must widen as ~exp(c/sqrt(n)) or
+   the kernel approximation stalls at ~25% error. See lift_weights_geometric.
+
+## PRIORITY WORK (in order) — this is why we came to Claude Code
+
+The whole reason for moving here: the earlier environment had 3-minute run caps
+and OOM-killed background jobs, so the PINN could never train properly. You do
+not have those limits. Fix the PINN:
+
+1. **Boundary/asymptotic losses (BIGGEST WIN).** The wing blow-up is unanchored
+   boundaries. Add loss terms enforcing:
+     - P -> 0                         as S -> 0   (deep OTM call)
+     - P -> S - K e^{-r tau}          as S -> inf (deep ITM call)
+     - optionally dP/dS -> 1 as S->inf, -> 0 as S->0
+   Sample these boundary points every iteration and add to the loss.
+
+2. **Adaptive loss weighting + tau-curriculum.** Fixed-weight residual training
+   oscillates. Implement self-adaptive weights (learnable per-term) or the NTK
+   scheme (Wang, Yu, Perdikaris 2022). Add a curriculum: train small tau first,
+   then expand the tau range (respect causality — Wang, Sankaran, Perdikaris 2022).
+
+3. **Factor-space sampling.** pinn.py samples factors u_i from a fixed box
+   (u_scale=0.05). Instead, run a short MC (lifted_mc.py) to see where the
+   factors actually live, and sample collocation from that range per maturity.
+
+4. **Scale up.** Once stable: width>=128, depth 5-6, 40k-100k iters, GPU. Then
+   validate vs Fourier PER MATURITY and target single-digit vol bp ATM,
+   <50 bp across the traded strike range.
+
+5. **Parametric PINN (thesis headline).** Add (H, nu, rho, ...) as network
+   INPUTS so one trained net prices across the whole parameter space -> instant
+   recalibration. Compare calibration speed to the Fourier-in-the-loop baseline.
+
+## How to verify you fixed the PINN
+
+The acceptance test is in validate_pinn.py: train, then compare PINN prices and
+implied vols to price_european_fourier across strikes 0.85..1.15. Success =
+IV RMSE < ~50 vol bp and a CONVEX, monotone price curve (not linear). Always
+validate against the Fourier truth — never trust the PINN's self-reported loss.
+
+## Environment
+
+    python -m venv venv && source venv/bin/activate
+    pip install -r requirements.txt      # numpy scipy pandas torch matplotlib requests
+    # GPU strongly recommended for the PINN. Everything else runs on CPU.
+
+## Conventions
+
+- Keep the common data schema:
+  ['symbol','expiry','T','type','strike','spot','ltp','bid','ask','iv_mkt'].
+- r=0 for crypto (no clean carry); forward comes from the quotes.
+- Don't reintroduce NSE as primary; Deribit is the source.
+- When you change a solver, re-run its __main__ self-test (each file has one).
