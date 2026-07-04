@@ -31,7 +31,8 @@ PDE that the PINN can solve.
     validate_pinn.py       PINN vs Fourier comparison + figures.
     run_all.py             Orchestrator: data -> ... -> figures.
     data/deribit_chain.csv Real BTC data (912 rows) already pulled. USE THIS.
-    calib_real.json        Calibrated params on real BTC (H=0.044, rho=-0.94).
+    calib_real.json        Calibrated params on real BTC (H=0.090, rho=-0.79).
+                           Canonical full-budget fit; regenerate w/ generate_calib.py.
 
 ## Trust map — READ THIS BEFORE RELYING ON ANYTHING
 
@@ -42,8 +43,13 @@ VALIDATED (safe to build on):
   Heston to within Euler bias (shrinks as steps increase). The two pricers are
   INDEPENDENT (one approximates only an ODE, the other the model+dynamics), so
   their agreement is a real cross-check. THESE ARE YOUR GROUND TRUTH.
-- Data + surface + calibration: run end to end on real BTC. Calibration gives
-  economically sensible params but a COARSE fit (628 vol bp) due to lean budget.
+- Data + surface + calibration: run end to end on real BTC. The CANONICAL fit
+  (generate_calib.py: full-budget DE + polish, all 13 maturities, <=8 pts/mat
+  spread across moneyness, r=0) gives H=0.090, V0=0.103, theta=0.253, lam=2.57,
+  nu=0.300, rho=-0.792 at 496 vol bp over 97 points. Economically sensible
+  (rough H, strong negative skew) but a COARSE fit -- crypto smiles are wide and
+  the lifted rough-Heston form is stiff. The older H=0.044/rho=-0.94 (628 bp)
+  was a lean 8-step run on 25 points and is SUPERSEDED.
 
 BROKEN / INCOMPLETE (do not trust results yet):
 - pinn.py. It trains and is ATM-accurate but its price surface collapses to
