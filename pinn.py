@@ -311,7 +311,7 @@ class RoughHestonPINN:
 
     def train(self, iters=3000, n_col=2000, n_bnd=500, n_bc=400, w_bc=0.3,
               lr=1e-3, log_every=500, adaptive=True, curriculum=True,
-              tau0_frac=0.15, curriculum_frac=0.5, val_pts=None):
+              tau0_frac=0.15, curriculum_frac=0.5, val_pts=None, on_log=None):
         """
         Stabilised training: self-adaptive per-term loss weights + tau-curriculum.
 
@@ -373,6 +373,8 @@ class RoughHestonPINN:
                       f"BC[otm {float(l_otm.detach()):.2e} itm {float(l_itm.detach()):.2e}]  "
                       f"tau_max {tau_max:.2f}  "
                       f"w[{w[0]:.2f},{w[1]:.2f},{w[2]:.2f}]")
+                if on_log is not None:      # optional external probe (e.g. IV RMSE)
+                    on_log(it, self)
         return history
 
     # ---- inference ----
