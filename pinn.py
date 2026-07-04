@@ -106,15 +106,23 @@ class RoughHestonPINN:
         # instead of in an arbitrary symmetric box -- the fix for the flat smile.
         self.u_mean = torch.zeros(self.n, device=device)
         self.u_std = torch.full((self.n,), self.u_scale, device=device)
-        self.u_tail_frac = 0.20       # fraction of u points drawn from 2x std
-        self.u_tail_scale = 2.0
+        self.u_tail_frac = 0.20       # fraction of u points drawn from wider std
+        self.u_tail_scale = 2.0       # tail widening on the high-variance side
+        self.u_tail_scale_low = None  # if set, widen the low-variance (u<mean) side
 
-    def set_factor_sampling(self, mean, std, tail_frac=0.20, tail_scale=2.0):
+    def set_factor_sampling(self, mean, std, tail_frac=0.20, tail_scale=2.0,
+                            tail_scale_low=None):
         """
         Point PINN factor-collocation at the MC-empirical factor distribution.
         `mean`, `std` are per-factor arrays (length n) from
         lifted_mc.simulate_factor_stats. A std floor keeps degenerate (instantly
         mean-reverting) factors from collapsing to a delta.
+
+        tail_scale_low (optional): widen the tail slice ASYMMETRICALLY on the
+        low-variance side (u below its mean -> lower V, since V=V0+sum c_i u_i
+        with c_i>0). That is the side governing the steep OTM-put skew, so
+        extending it (e.g. 3x std) probes whether the put-wing error is a
+        factor-tail coverage problem. Defaults to symmetric (=tail_scale).
         """
         mean = np.atleast_1d(np.asarray(mean, dtype=float))
         std = np.atleast_1d(np.asarray(std, dtype=float))
@@ -123,13 +131,24 @@ class RoughHestonPINN:
         self.u_std = torch.tensor(std, device=self.device)
         self.u_tail_frac = tail_frac
         self.u_tail_scale = tail_scale
+        self.u_tail_scale_low = tail_scale_low
 
     def _sample_u(self, m):
-        """Draw m factor vectors ~ N(u_mean, u_std), with a tail slice at 2x std."""
+        """Draw m factor vectors ~ N(u_mean, u_std); a tail slice is drawn from a
+        wider std to cover the tails (optionally asymmetric via tail_scale_low)."""
         eps = torch.randn(m, self.n, device=self.device)
         n_tail = int(round(self.u_tail_frac * m))
         if n_tail > 0:
-            eps[:n_tail] *= self.u_tail_scale        # widen a slice to cover tails
+            tail = eps[:n_tail]
+            if self.u_tail_scale_low is not None:
+                # low-variance side (eps<0 -> u below mean) widened separately
+                lo = tail < 0
+                tail = torch.where(lo, tail * self.u_tail_scale_low,
+                                   tail * self.u_tail_scale)
+            else:
+                tail = tail * self.u_tail_scale
+            eps = eps.clone()
+            eps[:n_tail] = tail
         return self.u_mean[None, :] + eps * self.u_std[None, :]
 
     # ---- smoothed terminal payoff (call) in log-spot coords ----
