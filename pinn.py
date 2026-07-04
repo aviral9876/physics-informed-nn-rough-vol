@@ -190,20 +190,23 @@ class RoughHestonPINN:
         return res
 
     # ---- collocation sampling ----
-    def sample(self, n_col, n_bnd):
+    def sample(self, n_col, n_bnd, tau_max=None):
+        # tau_max lets the tau-curriculum restrict collocation to short
+        # maturities early in training and grow the horizon over time.
+        tau_max = self.T if tau_max is None else tau_max
         dev = self.device
-        tau = torch.rand(n_col, 1, device=dev) * self.T
+        tau = torch.rand(n_col, 1, device=dev) * tau_max
         x = torch.rand(n_col, 1, device=dev)*(self.x_hi-self.x_lo)+self.x_lo
         u = (torch.rand(n_col, self.n, device=dev)-0.5)*2*self.u_scale
         # extra collocation concentrated near the strike & short tau (hard region)
-        tau2 = torch.rand(n_bnd, 1, device=dev)**2 * self.T*0.2
+        tau2 = torch.rand(n_bnd, 1, device=dev)**2 * tau_max*0.2
         x2 = torch.randn(n_bnd, 1, device=dev)*0.05 + np.log(self.K)
         u2 = (torch.rand(n_bnd, self.n, device=dev)-0.5)*2*self.u_scale
         tau = torch.cat([tau, tau2]); x = torch.cat([x, x2]); u = torch.cat([u, u2])
         return tau, x, u
 
     # ---- asymptotic boundary sampling ----
-    def sample_boundary(self, n_bc):
+    def sample_boundary(self, n_bc, tau_max=None):
         """
         Draw fresh Dirichlet boundary points at the two domain edges, spanning
         the full (tau, u) range so the anchor holds for every maturity/factor
@@ -213,9 +216,10 @@ class RoughHestonPINN:
         These are the anchors the unconstrained net was missing, which let its
         tau*N correction grow without bound and blow up in the wings.
         """
+        tau_max = self.T if tau_max is None else tau_max
         dev = self.device
-        tau_l = torch.rand(n_bc, 1, device=dev) * self.T
-        tau_r = torch.rand(n_bc, 1, device=dev) * self.T
+        tau_l = torch.rand(n_bc, 1, device=dev) * tau_max
+        tau_r = torch.rand(n_bc, 1, device=dev) * tau_max
         u_l = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
         u_r = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
         x_l = torch.full((n_bc, 1), self.x_lo, device=dev)
@@ -225,34 +229,115 @@ class RoughHestonPINN:
         tgt_r = S_r - self.K * torch.exp(-self.r * tau_r)
         return (tau_l, x_l, u_l, tgt_l), (tau_r, x_r, u_r, tgt_r)
 
-    def boundary_loss(self, n_bc):
-        """MSE of the net's price against the deep-OTM/ITM asymptotic targets."""
-        (tau_l, x_l, u_l, tgt_l), (tau_r, x_r, u_r, tgt_r) = self.sample_boundary(n_bc)
+    def boundary_losses(self, n_bc, tau_max=None):
+        """
+        Deep-OTM and deep-ITM boundary MSEs, returned SEPARATELY so the adaptive
+        weighting can balance them (the ITM target ~ S-K is O(1), the OTM target
+        is ~0, so a single lumped term would be dominated by the ITM side).
+        """
+        (tau_l, x_l, u_l, tgt_l), (tau_r, x_r, u_r, tgt_r) = \
+            self.sample_boundary(n_bc, tau_max)
         P_l = self.price_ansatz(tau_l, x_l, u_l)
         P_r = self.price_ansatz(tau_r, x_r, u_r)
-        return ((P_l - tgt_l) ** 2).mean() + ((P_r - tgt_r) ** 2).mean()
+        return ((P_l - tgt_l) ** 2).mean(), ((P_r - tgt_r) ** 2).mean()
+
+    def boundary_loss(self, n_bc, tau_max=None):
+        """MSE of the net's price against the deep-OTM/ITM asymptotic targets."""
+        l_otm, l_itm = self.boundary_losses(n_bc, tau_max)
+        return l_otm + l_itm
+
+    def fixed_val_set(self, n=1500, seed=12345):
+        """
+        A DETERMINISTIC interior collocation set for held-out residual tracking.
+        Evaluating the PDE residual on the same points every log step removes the
+        Monte-Carlo noise of the resampled training batch, exposing the true
+        (monotone-ish) convergence -- pass this to train(val_pts=...).
+        """
+        g = torch.Generator(device=self.device).manual_seed(seed)
+        tau = torch.rand(n, 1, generator=g, device=self.device) * self.T
+        x = torch.rand(n, 1, generator=g, device=self.device) \
+            * (self.x_hi - self.x_lo) + self.x_lo
+        u = (torch.rand(n, self.n, generator=g, device=self.device) - 0.5) \
+            * 2 * self.u_scale
+        return (tau, x, u)
+
+    def _tau_max(self, it, iters, curriculum, tau0_frac, curriculum_frac):
+        """
+        tau-curriculum (Wang, Sankaran, Perdikaris 2022): start at a short
+        horizon tau0_frac*T where the PDE is easiest and the terminal data is
+        nearby, then ramp linearly to the full T over the first curriculum_frac
+        of training. Respecting this causal ordering keeps the residual from
+        fighting long-maturity error before the short end has converged.
+        """
+        if not curriculum:
+            return self.T
+        ramp = min(1.0, it / max(1.0, curriculum_frac * iters))
+        return self.T * (tau0_frac + (1.0 - tau0_frac) * ramp)
 
     def train(self, iters=3000, n_col=2000, n_bnd=500, n_bc=400, w_bc=0.3,
-              lr=1e-3, log_every=500):
-        opt = torch.optim.Adam(self.net.parameters(), lr=lr)
+              lr=1e-3, log_every=500, adaptive=True, curriculum=True,
+              tau0_frac=0.15, curriculum_frac=0.5, val_pts=None):
+        """
+        Stabilised training: self-adaptive per-term loss weights + tau-curriculum.
+
+        Adaptive weighting (learnable homoscedastic-uncertainty scheme, Kendall
+        et al. 2018): each loss term L_k gets a learnable log-variance s_k and
+        the objective is  sum_k [ exp(-s_k) L_k + s_k ].  The network minimises
+        it while the s_k adapt to auto-balance the PDE-residual and the two
+        boundary terms -- large/noisy terms are down-weighted, small ones lifted
+        -- so we no longer hand-tune w_bc. Effective weight of term k is
+        exp(-s_k). Falls back to loss_pde + w_bc*(l_otm+l_itm) when adaptive=False.
+
+        Monotonicity note: the per-iteration BATCH loss is a noisy Monte-Carlo
+        estimate (collocation is resampled every step), so it is jagged by
+        construction. Pass a FIXED `val_pts=(tau,x,u)` set to also record a
+        held-out residual curve in self.val_history -- that curve isolates true
+        convergence from sampling noise and is the honest "is it monotone?" test.
+        """
+        # per-term learnable log-variances: [PDE, boundary-OTM, boundary-ITM]
+        log_sigma = torch.zeros(3, dtype=torch.get_default_dtype(),
+                                device=self.device, requires_grad=True)
+        params = list(self.net.parameters())
+        if adaptive:
+            params = params + [log_sigma]
+        opt = torch.optim.Adam(params, lr=lr)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, iters)
         history = []
+        self.val_history = []
         for it in range(iters):
+            tau_max = self._tau_max(it, iters, curriculum, tau0_frac, curriculum_frac)
             opt.zero_grad()
-            tau, x, u = self.sample(n_col, n_bnd)
+            tau, x, u = self.sample(n_col, n_bnd, tau_max)
             res = self.pde_residual(tau, x, u)
             loss_pde = (res**2).mean()
-            loss_bc = self.boundary_loss(n_bc)      # fresh boundary points each iter
-            loss = loss_pde + w_bc * loss_bc
+            # fresh boundary points each iter, split OTM / ITM
+            l_otm, l_itm = self.boundary_losses(n_bc, tau_max)
+
+            if adaptive:
+                terms = torch.stack([loss_pde, l_otm, l_itm])
+                loss = (torch.exp(-log_sigma) * terms + log_sigma).sum()
+            else:
+                loss = loss_pde + w_bc * (l_otm + l_itm)
+
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), 1.0)
             opt.step(); sched.step()
             if it % log_every == 0 or it == iters-1:
-                lval = float(loss.detach())
-                history.append((it, lval))
-                print(f"  iter {it:5d}  loss {lval:.3e}  "
-                      f"(PDE {float(loss_pde.detach()):.3e}  "
-                      f"BC {float(loss_bc.detach()):.3e})")
+                # record the UNWEIGHTED PDE residual MSE -- the physical quantity
+                # whose monotone decrease is the real convergence signal.
+                pde_val = float(loss_pde.detach())
+                history.append((it, pde_val))
+                vmsg = ""
+                if val_pts is not None:
+                    vres = self.pde_residual(*val_pts)
+                    vval = float((vres**2).mean().detach())
+                    self.val_history.append((it, vval))
+                    vmsg = f"  val {vval:.3e}"
+                w = torch.exp(-log_sigma).detach()
+                print(f"  iter {it:5d}  PDE {pde_val:.3e}{vmsg}  "
+                      f"BC[otm {float(l_otm.detach()):.2e} itm {float(l_itm.detach()):.2e}]  "
+                      f"tau_max {tau_max:.2f}  "
+                      f"w[{w[0]:.2f},{w[1]:.2f},{w[2]:.2f}]")
         return history
 
     # ---- inference ----

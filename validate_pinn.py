@@ -28,7 +28,10 @@ def evaluate(params, H, n_factors, K=1.0, r=0.0, T=1.0,
     pinn = RoughHestonPINN(params, (c, x), K=K, r=r, T=T,
                            width=width, depth=depth)
     print(f"Training PINN (n={n_factors}, width={width}, depth={depth})...")
-    hist = pinn.train(iters=train_iters, n_col=2000, n_bnd=500, log_every=1000)
+    val_pts = pinn.fixed_val_set()          # held-out set for a clean loss curve
+    hist = pinn.train(iters=train_iters, n_col=2000, n_bnd=500, log_every=200,
+                      val_pts=val_pts)
+    val_hist = pinn.val_history
 
     strikes = np.array([0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15])
     # ground truth: Fourier call at spot S0=1 across strikes.
@@ -61,7 +64,7 @@ def evaluate(params, H, n_factors, K=1.0, r=0.0, T=1.0,
     print(f"\nPrice RMSE = {price_rmse:.5f} | IV RMSE = {iv_rmse_bp:.1f} vol bp")
 
     return dict(pinn=pinn, strikes=strikes, fpx=fpx, ppx=ppx,
-                iv_f=iv_f, iv_p=iv_p, hist=hist,
+                iv_f=iv_f, iv_p=iv_p, hist=hist, val_hist=val_hist,
                 price_rmse=price_rmse, iv_rmse_bp=iv_rmse_bp)
 
 
@@ -85,11 +88,17 @@ def make_figures(res, params, H, outdir="figures"):
     ax[1].set_title(f"Implied-vol smile (H={H})"); ax[1].set_xlabel("K/S0")
     ax[1].set_ylabel("IV (%)"); ax[1].legend(); ax[1].grid(alpha=.3)
 
-    # 3) training loss
+    # 3) training loss: noisy resampled BATCH residual vs the clean held-out
+    #    curve. The batch loss is a jagged Monte-Carlo estimate; the held-out
+    #    residual on a fixed collocation set shows the true monotone-ish descent.
     it, lo = zip(*res["hist"])
-    ax[2].semilogy(it, lo, "-")
+    ax[2].semilogy(it, lo, "-", color="0.7", lw=.8, label="batch (resampled, noisy)")
+    if res.get("val_hist"):
+        vit, vlo = zip(*res["val_hist"])
+        ax[2].semilogy(vit, vlo, "-", color="tab:blue", lw=2.0,
+                       label="held-out (fixed set)")
     ax[2].set_title("PINN training loss"); ax[2].set_xlabel("iteration")
-    ax[2].set_ylabel("PDE residual MSE"); ax[2].grid(alpha=.3)
+    ax[2].set_ylabel("PDE residual MSE"); ax[2].legend(); ax[2].grid(alpha=.3)
     fig.tight_layout()
     fig.savefig(f"{outdir}/pinn_validation.png", dpi=130)
     print(f"saved -> {outdir}/pinn_validation.png")
