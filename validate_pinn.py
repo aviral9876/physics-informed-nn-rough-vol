@@ -17,16 +17,24 @@ import matplotlib.pyplot as plt
 
 from rough_heston_lift import lift_weights_geometric
 from rough_heston_fourier import price_european_fourier
+from lifted_mc import simulate_factor_stats
 from surface import implied_vol
 from pinn import RoughHestonPINN
 
 
 def evaluate(params, H, n_factors, K=1.0, r=0.0, T=1.0,
-             train_iters=4000, width=64, depth=4, seed=0):
+             train_iters=4000, width=64, depth=4, seed=0, mc_factors=True):
     torch_seed(seed)
     c, x = lift_weights_geometric(H+0.5, n_factors)
     pinn = RoughHestonPINN(params, (c, x), K=K, r=r, T=T,
                            width=width, depth=depth)
+    # Task 3: pre-flight MC to place factor collocation where the factors live,
+    # instead of an arbitrary symmetric box (fixes the too-flat smile).
+    if mc_factors:
+        u_mean, u_std, _, _ = simulate_factor_stats(K, T, params, (c, x),
+                                                    n_paths=2000, n_steps=300, seed=1)
+        pinn.set_factor_sampling(u_mean, u_std)
+        print(f"MC factor collocation: mean={np.round(u_mean,4)} std={np.round(u_std,4)}")
     print(f"Training PINN (n={n_factors}, width={width}, depth={depth})...")
     val_pts = pinn.fixed_val_set()          # held-out set for a clean loss curve
     hist = pinn.train(iters=train_iters, n_col=2000, n_bnd=500, log_every=200,

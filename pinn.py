@@ -97,7 +97,40 @@ class RoughHestonPINN:
         # conditions below are essentially exact, while the PDE residual on the
         # interior connects those anchors to the traded-strike core.
         self.x_lo, self.x_hi = np.log(K) - x_halfwidth, np.log(K) + x_halfwidth
-        self.u_scale = 0.05           # factors start at 0, stay small; sample O(0.05)
+        self.u_scale = 0.05           # legacy box scale; fallback when no MC fit
+
+        # Per-factor collocation distribution for u. By DEFAULT this is an
+        # uninformative box centred at 0 (mean 0, std u_scale). Task 3: replace
+        # it with the MC-empirical mean/std of each lifted factor via
+        # set_factor_sampling(), so collocation lands where the factors live
+        # instead of in an arbitrary symmetric box -- the fix for the flat smile.
+        self.u_mean = torch.zeros(self.n, device=device)
+        self.u_std = torch.full((self.n,), self.u_scale, device=device)
+        self.u_tail_frac = 0.20       # fraction of u points drawn from 2x std
+        self.u_tail_scale = 2.0
+
+    def set_factor_sampling(self, mean, std, tail_frac=0.20, tail_scale=2.0):
+        """
+        Point PINN factor-collocation at the MC-empirical factor distribution.
+        `mean`, `std` are per-factor arrays (length n) from
+        lifted_mc.simulate_factor_stats. A std floor keeps degenerate (instantly
+        mean-reverting) factors from collapsing to a delta.
+        """
+        mean = np.atleast_1d(np.asarray(mean, dtype=float))
+        std = np.atleast_1d(np.asarray(std, dtype=float))
+        std = np.maximum(std, 1e-8)
+        self.u_mean = torch.tensor(mean, device=self.device)
+        self.u_std = torch.tensor(std, device=self.device)
+        self.u_tail_frac = tail_frac
+        self.u_tail_scale = tail_scale
+
+    def _sample_u(self, m):
+        """Draw m factor vectors ~ N(u_mean, u_std), with a tail slice at 2x std."""
+        eps = torch.randn(m, self.n, device=self.device)
+        n_tail = int(round(self.u_tail_frac * m))
+        if n_tail > 0:
+            eps[:n_tail] *= self.u_tail_scale        # widen a slice to cover tails
+        return self.u_mean[None, :] + eps * self.u_std[None, :]
 
     # ---- smoothed terminal payoff (call) in log-spot coords ----
     def payoff_smooth(self, x):
@@ -197,11 +230,11 @@ class RoughHestonPINN:
         dev = self.device
         tau = torch.rand(n_col, 1, device=dev) * tau_max
         x = torch.rand(n_col, 1, device=dev)*(self.x_hi-self.x_lo)+self.x_lo
-        u = (torch.rand(n_col, self.n, device=dev)-0.5)*2*self.u_scale
+        u = self._sample_u(n_col)          # factors where the MC says they live
         # extra collocation concentrated near the strike & short tau (hard region)
         tau2 = torch.rand(n_bnd, 1, device=dev)**2 * tau_max*0.2
         x2 = torch.randn(n_bnd, 1, device=dev)*0.05 + np.log(self.K)
-        u2 = (torch.rand(n_bnd, self.n, device=dev)-0.5)*2*self.u_scale
+        u2 = self._sample_u(n_bnd)
         tau = torch.cat([tau, tau2]); x = torch.cat([x, x2]); u = torch.cat([u, u2])
         return tau, x, u
 
@@ -220,8 +253,8 @@ class RoughHestonPINN:
         dev = self.device
         tau_l = torch.rand(n_bc, 1, device=dev) * tau_max
         tau_r = torch.rand(n_bc, 1, device=dev) * tau_max
-        u_l = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
-        u_r = (torch.rand(n_bc, self.n, device=dev) - 0.5) * 2 * self.u_scale
+        u_l = self._sample_u(n_bc)
+        u_r = self._sample_u(n_bc)
         x_l = torch.full((n_bc, 1), self.x_lo, device=dev)
         x_r = torch.full((n_bc, 1), self.x_hi, device=dev)
         tgt_l = torch.zeros(n_bc, 1, device=dev)
@@ -257,8 +290,10 @@ class RoughHestonPINN:
         tau = torch.rand(n, 1, generator=g, device=self.device) * self.T
         x = torch.rand(n, 1, generator=g, device=self.device) \
             * (self.x_hi - self.x_lo) + self.x_lo
-        u = (torch.rand(n, self.n, generator=g, device=self.device) - 0.5) \
-            * 2 * self.u_scale
+        # factors from the same per-factor distribution used in training
+        u = self.u_mean[None, :] \
+            + torch.randn(n, self.n, generator=g, device=self.device) \
+            * self.u_std[None, :]
         return (tau, x, u)
 
     def _tau_max(self, it, iters, curriculum, tau0_frac, curriculum_frac):

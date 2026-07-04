@@ -114,6 +114,71 @@ def price_european_mc(S0, K, T, r, params, lift,
     return prices
 
 
+def simulate_factor_stats(S0, T, params, lift,
+                          n_paths=2000, n_steps=300, seed=0, antithetic=True):
+    """
+    Pre-flight simulation that records WHERE THE LIFTED FACTORS ACTUALLY LIVE.
+
+    Runs the same exponential-Euler lifted dynamics as the pricer but, instead of
+    a payoff, accumulates the distribution of each factor U^i over all paths AND
+    all time steps. Returns per-factor statistics used to place PINN collocation
+    where the factors are, rather than in an arbitrary symmetric box:
+
+        mean  : (n,) pooled empirical mean  of U^i over (paths x steps)
+        std   : (n,) pooled empirical stdev of U^i over (paths x steps)
+        step_mean, step_std : (n_steps, n) per-time-step stats (for inspection)
+
+    Keeps the integrating-factor scheme for the stiff -x_i U_i term untouched.
+    """
+    c, x = lift
+    n = c.shape[0]
+    V0 = params["V0"]; theta = params["theta"]; lam = params["lam"]
+    nu = params["nu"]; rho = params["rho"]
+
+    rng = np.random.default_rng(seed)
+    dt = T / n_steps
+    sdt = np.sqrt(dt)
+    if antithetic:
+        half = n_paths // 2
+        n_paths = 2 * half
+
+    U = np.zeros((n_paths, n))
+    z = x * dt
+    E = np.exp(-z)
+    phi1 = np.where(z > 1e-12, (1.0 - E) / np.where(z > 1e-12, z, 1.0), 1.0)
+    E_row = E[None, :]
+    w_src = (phi1 * dt)[None, :]
+    w_dif = phi1[None, :]
+
+    sums = np.zeros(n); sumsq = np.zeros(n); count = 0
+    step_mean = np.empty((n_steps, n)); step_std = np.empty((n_steps, n))
+
+    for t in range(n_steps):
+        if antithetic:
+            zW = rng.standard_normal(half)
+            dW = np.concatenate([zW, -zW]) * sdt
+        else:
+            dW = rng.standard_normal(n_paths) * sdt
+
+        V = V0 + U @ c
+        Vp = np.maximum(V, 0.0)
+        sqrtV = np.sqrt(Vp)
+        source = (lam * (theta - Vp))[:, None]
+        diffusion = (nu * sqrtV)[:, None]
+        U = U * E_row + source * w_src + diffusion * dW[:, None] * w_dif
+
+        step_mean[t] = U.mean(axis=0)
+        step_std[t] = U.std(axis=0)
+        sums += U.sum(axis=0)
+        sumsq += (U * U).sum(axis=0)
+        count += n_paths
+
+    mean = sums / count
+    var = np.maximum(sumsq / count - mean * mean, 0.0)
+    std = np.sqrt(var)
+    return mean, std, step_mean, step_std
+
+
 if __name__ == "__main__":
     from rough_heston_lift import lift_weights_geometric
     from scipy.stats import norm
