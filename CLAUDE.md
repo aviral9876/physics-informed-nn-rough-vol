@@ -73,6 +73,12 @@ PINN STATUS (Tasks 1-4c done; validate ALWAYS decomposed into solve vs lift):
   error; the PINN solves its PDE to well under 50 bp. RMSEs don't add (solve is
   +signed, lift is -signed, they partly cancel). The lever for the Fourier gap
   is MORE FACTORS n, not more training.
+- HEADLINE n-convergence (diagnose_n_convergence.py, figure pinn_n_convergence):
+  as n grows 4->32 the PINN SOLVE-ERROR STAYS FLAT (~5-7 price bp, meshfree) and
+  train cost stays bounded (~6-10 min CPU, ms/iter ~flat), while the lift-error
+  falls (16->2 px bp) and a naive FD grid 50^(n+1) explodes (3e8 -> 1e56,
+  infeasible by n=8). Flat solve-error + bounded cost vs FD blow-up = the
+  curse-of-dimensionality argument for the meshfree PINN.
 
 ## Two hard-won implementation facts (do not regress these)
 
