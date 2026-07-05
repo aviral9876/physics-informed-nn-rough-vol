@@ -30,10 +30,13 @@ def evaluate(params, H, n_factors, K=1.0, r=0.0, T=1.0,
                            width=width, depth=depth)
     # Task 3: pre-flight MC to place factor collocation where the factors live,
     # instead of an arbitrary symmetric box (fixes the too-flat smile).
+    # Task 4c: the same MC gives the factor-mean term structure, used to anchor
+    # the BS baseline at the model's expected integrated variance (not V0).
     if mc_factors:
-        u_mean, u_std, _, _ = simulate_factor_stats(K, T, params, (c, x),
+        u_mean, u_std, step_mean, _ = simulate_factor_stats(K, T, params, (c, x),
                                                     n_paths=2000, n_steps=300, seed=1)
         pinn.set_factor_sampling(u_mean, u_std)
+        pinn.set_baseline_term_structure(step_mean)
         print(f"MC factor collocation: mean={np.round(u_mean,4)} std={np.round(u_std,4)}")
     print(f"Training PINN (n={n_factors}, width={width}, depth={depth})...")
     val_pts = pinn.fixed_val_set()          # held-out set for a clean loss curve

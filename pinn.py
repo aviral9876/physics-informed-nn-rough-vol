@@ -110,6 +110,14 @@ class RoughHestonPINN:
         self.u_tail_scale = 2.0       # tail widening on the high-variance side
         self.u_tail_scale_low = None  # if set, widen the low-variance (u<mean) side
 
+        # BS-baseline variance term structure. By DEFAULT the baseline uses the
+        # SPOT variance V0 (flat). Task 4c: because the factors mean-revert from
+        # V0 toward theta, the model's expected integrated variance is larger,
+        # so anchoring the baseline at V0 leaves a uniform level bias. Calling
+        # set_baseline_term_structure() replaces V0 with w(tau)=int_0^tau E[V_s]ds.
+        self._tau_grid = None         # (G,) time nodes s
+        self._w_grid = None           # (G,) cumulative E[variance] w(s)=int_0^s E[V]
+
     def set_factor_sampling(self, mean, std, tail_frac=0.20, tail_scale=2.0,
                             tail_scale_low=None):
         """
@@ -163,19 +171,59 @@ class RoughHestonPINN:
         V = self.p["V0"] + (u * self.c).sum(dim=1, keepdim=True)
         return torch.clamp(V, min=1e-6)
 
+    def set_baseline_term_structure(self, step_mean):
+        """
+        Anchor the BS baseline at the LIFTED model's expected integrated variance
+        instead of the spot variance V0 (Task 4c). `step_mean` is the per-time-step
+        factor-mean array (n_steps, n) from lifted_mc.simulate_factor_stats on this
+        maturity. We form E[V_s] = V0 + step_mean_s . c on the MC grid (with
+        E[V_0]=V0) and cumulative-trapezoid it to the total variance
+        w(s) = int_0^s E[V_r] dr, so the baseline vol at any tau is
+        sigma(tau) = sqrt(w(tau)/tau). Must be the LIFTED E[V] (not the classical
+        Heston closed form) because the PINN solves the lifted PDE.
+        """
+        step_mean = np.atleast_2d(np.asarray(step_mean, dtype=float))
+        c_np = self.c.detach().cpu().numpy()
+        EV = self.p["V0"] + step_mean @ c_np                 # E[V] at times dt..T
+        s = np.linspace(0.0, self.T, len(step_mean) + 1)     # nodes [0, dt, .., T]
+        ev = np.concatenate([[self.p["V0"]], EV])            # E[V] at nodes, E[V_0]=V0
+        w = np.concatenate([[0.0],
+                            np.cumsum(0.5 * (ev[1:] + ev[:-1]) * np.diff(s))])
+        self._tau_grid = torch.tensor(s, device=self.device)
+        self._w_grid = torch.tensor(w, device=self.device)
+
+    def _total_variance(self, tau):
+        """
+        Baseline total variance to maturity tau. Uses the term structure w(tau)
+        (piecewise-linear interpolation, differentiable in tau so the PDE
+        residual's P_tau stays correct) when set, else the flat V0*tau.
+        """
+        if self._w_grid is None:
+            return self.p["V0"] * tau
+        shape = tau.shape
+        t = tau.reshape(-1)
+        tg, wg = self._tau_grid, self._w_grid
+        idx = torch.searchsorted(tg, t.detach(), right=True).clamp(1, tg.numel() - 1)
+        t0, t1 = tg[idx - 1], tg[idx]
+        w0, w1 = wg[idx - 1], wg[idx]
+        frac = (t - t0) / (t1 - t0)                           # linear in tau -> grad ok
+        return (w0 + frac * (w1 - w0)).reshape(shape)
+
     def _bs_baseline(self, tau, x):
         """
-        Black-Scholes call with the model's initial variance V0, computed in
-        torch so it is differentiable for the PDE residual. As tau -> 0 the BS
-        call converges to the exact payoff max(S-K,0), so this baseline already
-        satisfies the initial condition WITHOUT any blending. The network learns
-        only the rough-vol correction on top (identically zero when nu=0).
+        Black-Scholes call anchored at the model's expected TOTAL variance to tau.
+        By default that is V0*tau (spot variance); after set_baseline_term_structure
+        it is w(tau)=int_0^tau E[V_s] ds, which accounts for the factors mean-
+        reverting from V0 toward theta. As tau -> 0 the total variance -> 0 so the
+        BS call converges to the exact payoff max(S-K,0), satisfying the initial
+        condition WITHOUT blending; the network learns only the correction on top.
+        Written in torch so it is differentiable for the PDE residual.
         """
         S = torch.exp(x)
-        sig = np.sqrt(self.p["V0"])
-        sqrt_tau = torch.sqrt(torch.clamp(tau, min=1e-10))
-        d1 = (torch.log(S/self.K) + (self.r + 0.5*sig*sig)*tau) / (sig*sqrt_tau)
-        d2 = d1 - sig*sqrt_tau
+        tot_var = torch.clamp(self._total_variance(tau), min=1e-12)
+        sqrt_tv = torch.sqrt(tot_var)
+        d1 = (torch.log(S/self.K) + self.r*tau + 0.5*tot_var) / sqrt_tv
+        d2 = d1 - sqrt_tv
         Phi = lambda z: 0.5*(1.0 + torch.erf(z/np.sqrt(2.0)))
         return S*Phi(d1) - self.K*torch.exp(-self.r*tau)*Phi(d2)
 
