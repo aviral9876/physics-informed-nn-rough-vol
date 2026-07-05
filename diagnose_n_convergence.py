@@ -13,10 +13,16 @@ exactly: PINN-Fourier = (PINN-liftedMC) + (liftedMC-Fourier)):
  32      1.7          4.6            2.6          457 s          61      1.2e56
   (vol-bp ref, non-additive:  solve 33/48/43/29,  lift 133/63/27/12)
 
+NOTE: this file is a SINGLE-SEED run. The 3-seed sweep
+(diagnose_robustness_sweep.py) supersedes the solve-error column: solve-error is
+NOT flat, it GROWS MILDLY with n (5.4 -> 10.7 px bp over n=4->32); the flat/
+decreasing look here (4.7/6.9/5.9/4.6) was lucky seeds at n=16/32. Read the
+findings below with that correction.
+
 FINDINGS:
-  * PINN solve-error is FLAT in n (~5-7 price bp / ~30-48 vol bp, no upward
-    trend) -- the network is MESHFREE, so raising the PDE dimension does not
-    make its own solve harder. This is the empirical core of the method.
+  * PINN solve-error grows MILDLY (sub-linearly) in n -- ~2x over an 8x dimension
+    jump, far slower than a grid. The meshfree property holds in the WEAK form
+    (gentle degradation, not constant). This is the empirical core of the method.
   * lift-error shrinks monotonically (16.4 -> 1.7 px bp) -- the only knob that
     cuts the Fourier gap. It crosses the solve-error near n~9.
   * PINN wall-clock to plateau stays bounded (~6-10 min, ms/iter ~55->61 nearly

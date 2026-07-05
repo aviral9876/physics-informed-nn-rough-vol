@@ -73,12 +73,18 @@ PINN STATUS (Tasks 1-4c done; validate ALWAYS decomposed into solve vs lift):
   error; the PINN solves its PDE to well under 50 bp. RMSEs don't add (solve is
   +signed, lift is -signed, they partly cancel). The lever for the Fourier gap
   is MORE FACTORS n, not more training.
-- HEADLINE n-convergence (diagnose_n_convergence.py, figure pinn_n_convergence):
-  as n grows 4->32 the PINN SOLVE-ERROR STAYS FLAT (~5-7 price bp, meshfree) and
-  train cost stays bounded (~6-10 min CPU, ms/iter ~flat), while the lift-error
-  falls (16->2 px bp) and a naive FD grid 50^(n+1) explodes (3e8 -> 1e56,
-  infeasible by n=8). Flat solve-error + bounded cost vs FD blow-up = the
-  curse-of-dimensionality argument for the meshfree PINN.
+- HEADLINE n-convergence (diagnose_robustness_sweep.py 3-seed; single-seed cost/
+  FD in diagnose_n_convergence.py; figure pinn_n_convergence). As n grows 4->32:
+  PINN solve-error grows MILDLY -- 5.4 -> 10.7 price bp (mean+-std 1-2 bp), i.e.
+  ~2x over an 8x dimension jump (sub-linear, NOT flat -- an earlier single-seed
+  run looked flat by luck). Train cost stays bounded (~6-10 min CPU, ms/iter
+  ~flat). lift-error falls 16->2 px bp; lift/solve crossover ~n=8-10. A naive FD
+  grid 50^(n+1) explodes (3e8 -> 1e56, infeasible by n=8; structured FD like
+  sparse-grid/ADI/tensor-train push higher but still degrade with n and aren't
+  standard for lifted rough vol -- impractical, not impossible). Gentle solve
+  growth + bounded cost vs FD blow-up = the curse-of-dimensionality argument.
+- Robustness (T in {.05,.15,.5}, H in {.05,.10,.15}, n in {4,16}) and the
+  put-wing skew re-measured vs lifted MC: see the two memos + the sweep scripts.
 
 ## Two hard-won implementation facts (do not regress these)
 
