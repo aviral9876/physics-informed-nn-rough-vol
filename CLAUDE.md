@@ -85,6 +85,14 @@ PINN STATUS (Tasks 1-4c done; validate ALWAYS decomposed into solve vs lift):
   growth + bounded cost vs FD blow-up = the curse-of-dimensionality argument.
 - Robustness (T in {.05,.15,.5}, H in {.05,.10,.15}, n in {4,16}) and the
   put-wing skew re-measured vs lifted MC: see the two memos + the sweep scripts.
+- WATCH (high-n solve bias): the growth of solve-error with n is a real
+  DIRECTIONAL BIAS, not just noise -- vs the lifted MC the PINN systematically
+  OVER-prices ATM/calls (signed vol bp at n=32: atm ~+87, calls ~+114; put wing
+  ~0), and it grows with n (calls +62 at n=4 -> +114 at n=32); the price-space
+  RMSE reaches ~11 bp at n=32. Not fixing this now. Task 5 WATCH ITEM: a
+  parametric net spread over (H,nu,rho,...) may resolve each point less
+  precisely, so check whether parametric training AMPLIFIES this call/ATM bias
+  (compare per-(H,nu,rho) solve-error vs the single-point runs here).
 
 ## Two hard-won implementation facts (do not regress these)
 
