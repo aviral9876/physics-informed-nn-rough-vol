@@ -27,8 +27,8 @@ PDE that the PINN can solve.
     rough_heston_fourier.py Ground-truth pricer A: fractional Riccati + Lewis. VALIDATED.
     lifted_mc.py           Ground-truth pricer B: lifted-SDE Monte Carlo. VALIDATED.
     calibrate.py           Fit rough Heston to the surface (Fourier in the loop).
-    pinn.py                THE PINN. Solves the lifted PDE. *** NOT YET ACCURATE ***
-    validate_pinn.py       PINN vs Fourier comparison + figures.
+    pinn.py                THE PINN. Solves the lifted PDE. Solve-error ~8-37 bp.
+    validate_pinn.py       DECOMPOSED validation: PINN-solve vs lift error + figs.
     run_all.py             Orchestrator: data -> ... -> figures.
     data/deribit_chain.csv Real BTC data (912 rows) already pulled. USE THIS.
     calib_real.json        Calibrated params on real BTC (H=0.090, rho=-0.79).
@@ -40,9 +40,13 @@ VALIDATED (safe to build on):
 - Markovian lift: rel L2 kernel error 26% (n=5) -> 0.4% (n=100), monotone.
 - Fourier pricer: matches Black-Scholes to ~4e-7 in the flat-vol limit.
 - MC pricer: matches BS within MC error; agrees with Fourier on genuine rough
-  Heston to within Euler bias (shrinks as steps increase). The two pricers are
-  INDEPENDENT (one approximates only an ODE, the other the model+dynamics), so
-  their agreement is a real cross-check. THESE ARE YOUR GROUND TRUTH.
+  Heston (i.e. AT HIGH n) to within Euler bias. The two pricers are INDEPENDENT
+  (one approximates only an ODE, the other the model+dynamics), so their
+  agreement is a real cross-check. THESE ARE YOUR GROUND TRUTH. NOTE: at the
+  PINN's small n the LIFTED model genuinely differs from Fourier -- the
+  "lift-error" (lifted MC vs Fourier): 133 bp (n=4), 63 (n=8), 27 (n=16),
+  12 (n=32) at T=0.15. So the lifted MC (same n) is the PINN's true ground
+  truth; Fourier is the model's. Validation reports BOTH (see below).
 - Data + surface + calibration: run end to end on real BTC. The CANONICAL fit
   (generate_calib.py: full-budget DE + polish, all 13 maturities, <=8 pts/mat
   spread across moneyness, r=0) gives H=0.090, V0=0.103, theta=0.253, lam=2.57,
@@ -51,11 +55,24 @@ VALIDATED (safe to build on):
   the lifted rough-Heston form is stiff. The older H=0.044/rho=-0.94 (628 bp)
   was a lean 8-step run on 25 points and is SUPERSEDED.
 
-BROKEN / INCOMPLETE (do not trust results yet):
-- pinn.py. It trains and is ATM-accurate but its price surface collapses to
-  "BS-baseline + near-linear" and BLOWS UP IN THE WINGS; training loss is
-  unstable (oscillates ~1e-3 to 9e-2). IV RMSE vs Fourier ~ thousands of bp.
-  Fixing this is the core task (see PRIORITY WORK below).
+PINN STATUS (Tasks 1-4c done; validate ALWAYS decomposed into solve vs lift):
+- The price surface is now convex/monotone (boundary losses), training is
+  stabilised (adaptive weights + tau-curriculum), factor collocation is
+  MC-informed, and the BS baseline is anchored at the lifted forward variance.
+- Report TWO errors, never a lone "PINN vs Fourier" (see pinn-lift-error memo):
+    * PINN solve-error = PINN vs lifted MC at the SAME n. What the PINN controls.
+      Currently ~8-37 vol bp at n=4, T=0.15 -- MEETS the <50 bp target.
+    * lift-error = lifted MC vs Fourier. Model approximation; shrinks only with n
+      (133 bp n=4 -> 12 bp n=32).
+- Corrected record (canonical calib, T=0.15, n=4, 3 seeds, decomposed):
+      config                     solve   lift   total(vs Fourier)
+      Task3 old box (no MC fac)     61    133     194
+      Task3/4a full fixes           37    133     121
+      Task4b rho=0                   8    133     128
+  The old "~114-127 bp vs Fourier" figures were DOMINATED BY LIFT, not PINN
+  error; the PINN solves its PDE to well under 50 bp. RMSEs don't add (solve is
+  +signed, lift is -signed, they partly cancel). The lever for the Fourier gap
+  is MORE FACTORS n, not more training.
 
 ## Two hard-won implementation facts (do not regress these)
 
