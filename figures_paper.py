@@ -42,25 +42,36 @@ fig.tight_layout(); fig.savefig("figures/fig1_n_convergence.png", dpi=140); plt.
 cal = json.load(open("calib_real.json"))
 p = dict(V0=cal["V0"], theta=cal["theta"], lam=cal["lam"], nu=cal["nu"], rho=cal["rho"]); H = cal["H"]
 surf = cap_points_per_maturity(build_surface(pd.read_csv("data/deribit_chain.csv"), r=0.0))
+per = {}                                       # T -> (k, mkt_iv, mdl_iv)
 mk, mdl, mats = [], [], []
 for T, g in surf.groupby("T"):
-    K = np.exp(g["k"].values)
+    kk = g["k"].values; K = np.exp(kk)
     px = np.atleast_1d(price_european_fourier(1.0, K, T, 0.0, p, H, N=200, u_max=100, n_u=1000))
-    for i in range(len(K)):
-        iv = implied_vol(px[i], 1.0, K[i], T, 0.0, "C")
-        if np.isfinite(iv):
-            mk.append(g["iv"].values[i]); mdl.append(iv); mats.append(T)
+    mi = np.array([implied_vol(px[i], 1.0, K[i], T, 0.0, "C") for i in range(len(K))])
+    ok = np.isfinite(mi)
+    per[T] = (kk[ok], g["iv"].values[ok], mi[ok])
+    mk += list(g["iv"].values[ok]); mdl += list(mi[ok]); mats += [T] * ok.sum()
 mk, mdl, mats = np.array(mk), np.array(mdl), np.array(mats)
 rmse = 1e4 * np.sqrt(np.mean((mdl - mk) ** 2))
-fig, ax = plt.subplots(figsize=(6.2, 5.6))
-sc = ax.scatter(100 * mk, 100 * mdl, c=mats, cmap="viridis", s=22, alpha=.8)
+fig, (a0, a1) = plt.subplots(1, 2, figsize=(11.2, 4.9))
+# (a) market vs model scatter
+sc = a0.scatter(100 * mk, 100 * mdl, c=mats, cmap="viridis", s=20, alpha=.8)
 lim = [100 * min(mk.min(), mdl.min()) - 2, 100 * max(mk.max(), mdl.max()) + 2]
-ax.plot(lim, lim, "k--", lw=1, alpha=.6); ax.set_xlim(lim); ax.set_ylim(lim)
-ax.set_xlabel("market IV (%)"); ax.set_ylabel("model IV (%)")
-ax.set_title(f"BTC calibration fit  (H={H:.3f}, $\\rho$={cal['rho']:.2f};  "
-             f"RMSE {rmse:.0f} vol bp, {len(mk)} pts)")
-plt.colorbar(sc, label="maturity T (yr)"); ax.grid(alpha=.3)
-fig.tight_layout(); fig.savefig("figures/fig2_calibration_fit.png", dpi=140); plt.close(fig)
+a0.plot(lim, lim, "k--", lw=1, alpha=.6); a0.set_xlim(lim); a0.set_ylim(lim)
+a0.set_xlabel("market IV (%)"); a0.set_ylabel("model IV (%)"); a0.grid(alpha=.3)
+a0.set_title(f"(a) all points: RMSE {rmse:.0f} vol bp ({len(mk)} pts)")
+plt.colorbar(sc, ax=a0, label="maturity T (yr)")
+# (b) per-maturity smile overlay for 4 representative maturities
+Ts = sorted(per); sel = [Ts[1], Ts[6], Ts[9], Ts[12]]
+cols = plt.cm.viridis(np.linspace(0.05, 0.9, len(sel)))
+for T, c in zip(sel, cols):
+    kk, miv, dv = per[T]; o = np.argsort(kk)
+    a1.plot(kk[o], 100 * miv[o], "o", color=c, ms=5, label=f"T={T:.3f}")
+    a1.plot(kk[o], 100 * dv[o], "--", color=c, lw=1.6)
+a1.set_xlabel("log-moneyness  k = log(K/F)"); a1.set_ylabel("implied vol (%)")
+a1.set_title("(b) smiles: market (o) vs model (--)"); a1.legend(fontsize=8); a1.grid(alpha=.3)
+fig.suptitle(f"BTC calibration fit  (H={H:.3f}, $\\rho$={cal['rho']:.2f})", y=1.02)
+fig.tight_layout(); fig.savefig("figures/fig2_calibration_fit.png", dpi=140, bbox_inches="tight"); plt.close(fig)
 
 # ---------- Fig 3: hybrid calibration (committed: 8aba282) ----------
 meth = ["Fourier\nfrom scratch", "PINN-only\n(single-shot)", "Hybrid\n(PINN+polish)"]

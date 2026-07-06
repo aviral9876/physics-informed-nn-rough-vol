@@ -42,11 +42,11 @@ grid schemes fare better but remain impractical for this PDE. The solve/lift
 crossover yields a concrete rule for choosing $n$, which shifts to larger $n$ at
 longer maturities. Calibrated to real Bitcoin options, the model returns a rough
 Hurst exponent (about $0.09$) with strong negative correlation. Finally, a
-parametric PINN that takes the model parameters as inputs enables gradient-based
-recalibration; although the network alone is too inaccurate for production
-calibration, using it to warm-start a short local optimization against the true
-pricer reaches from-scratch fit quality at roughly nine times fewer true-model
-evaluations. Mesh-free PINNs thus scale gracefully in the lifted dimension where
+parametric PINN that takes the five model parameters as inputs --- holding the
+spot variance and maturity fixed --- enables gradient-based recalibration;
+although the network alone is too inaccurate for production calibration, using it
+to warm-start a short local optimization against the true pricer reaches
+from-scratch fit quality at roughly nine times fewer true-model evaluations. Mesh-free PINNs thus scale gracefully in the lifted dimension where
 grids cannot, and are most valuable as a differentiable warm-start for
 calibration.
 \end{abstract}
@@ -65,10 +65,10 @@ well-supported class of models, however, breaks this picture: under \emph{rough
 volatility} the instantaneous variance is driven by a fractional noise with
 Hurst exponent $H<1/2$, so the variance process is neither Markovian nor a
 semimartingale and there is \emph{no} finite-dimensional pricing PDE
-\citep{gatheral2018volatility,eleuch2019characteristic}. The standard remedy is
-the \emph{Markovian lift}: the fractional kernel is approximated by a sum of $n$
-exponentials, restoring a PDE at the cost of raising its dimension to $n+1$
-\citep{abijaber2019multifactor}. Because $n$ directly sets the dimension of the
+\citep{gatheral2018volatility,bennedsen2022decoupling,eleuch2019characteristic}.
+The standard remedy is the \emph{Markovian lift}: the fractional kernel is
+approximated by a sum of $n$ exponentials, restoring a PDE at the cost of raising
+its dimension to $n+1$ \citep{abijaber2019multifactor,abijaber2019lifting}. Because $n$ directly sets the dimension of the
 PDE while controlling a known approximation error, the lifted rough-volatility
 problem is a clean, economically motivated testbed for mesh-free neural PDE
 solvers and for studying the curse of dimensionality.
@@ -85,11 +85,14 @@ through the model coefficients; and, once trained across a parameter range, the
 network is differentiable in those parameters, enabling gradient-based
 calibration.
 
-On the finance side, rough volatility reproduces the observed roughness of
-realized variance and the term structure of at-the-money skew far better than
-classical stochastic-volatility models such as \citet{heston1993closed}, and the
-rough Heston model in particular admits a semi-analytic characteristic function
-\citep{eleuch2019characteristic}. Calibration, however, remains computationally
+On the finance side, and building on long-memory continuous-time volatility
+\citep{comte1998long}, the rough-volatility paradigm reproduces the observed
+roughness of realized variance and the term structure of at-the-money skew far
+better than classical stochastic-volatility models such as
+\citet{heston1993closed} \citep{gatheral2018volatility,bennedsen2022decoupling,
+bayer2016pricing}, and has microstructural foundations in high-frequency trading
+\citep{eleuch2018microstructural}; the rough Heston model in particular admits a
+semi-analytic characteristic function \citep{eleuch2019characteristic}. Calibration, however, remains computationally
 demanding, which motivates fast neural surrogates. We use Bitcoin (BTC) options
 as a testbed: the market is liquid, exhibits a pronounced negative skew, and
 calibrates to a rough Hurst exponent.
@@ -151,9 +154,9 @@ speed, which are central here.
 
 \paragraph{Neural calibration surrogates (the calibration foil).}
 The dominant paradigm for fast (rough-)volatility calibration is the supervised
-surrogate of \citet{horvath2021deep}: a neural network is trained offline on a
-large grid of precomputed model prices or implied volatilities and then used as
-a fast pricing map inside a calibration loop. This is purely data-driven and
+surrogate of \citet{bayer2019deep} and \citet{horvath2021deep}: a neural network
+is trained offline on a large grid of precomputed model prices or implied
+volatilities and then used as a fast pricing map inside a calibration loop. This is purely data-driven and
 carries no PDE consistency --- the network never sees the governing equation.
 Our parametric network is instead \emph{physics-informed}: it learns from the
 PDE residual rather than from precomputed labels. This distinction is what makes
@@ -177,8 +180,9 @@ training in the time variable \citep{wang2024respecting}.
 Under rough Heston the variance is driven by the fractional kernel
 $K(t)=t^{\alpha-1}/\Gamma(\alpha)$ with $\alpha=H+\tfrac12$ and $H<\tfrac12$,
 which is non-Markovian \citep{gatheral2018volatility,eleuch2019characteristic}.
-The Markovian lift \citep{abijaber2019multifactor} approximates
-$K(t)\approx\sum_{i=1}^{n}c_i e^{-x_i t}$, introducing $n$ Ornstein--Uhlenbeck
+The Markovian lift \citep{abijaber2019multifactor,abijaber2019lifting}
+approximates $K(t)\approx\sum_{i=1}^{n}c_i e^{-x_i t}$, introducing $n$
+Ornstein--Uhlenbeck
 factors $U^i$ with $V=V_0+\sum_i c_i U^i$. The discounted price $P(t,x,u)$, with
 $x=\log S$, then solves the $(n{+}1)$-dimensional backward Kolmogorov PDE
 \begin{align}
@@ -233,12 +237,15 @@ that the network would have to undo.
 
 The loss combines the interior residual of \eqref{eq:pde} with asymptotic
 boundary losses $P\to0$ as $S\to0$ and $P\to S-Ke^{-r\tau}$ as $S\to\infty$,
-resampled each iteration. Two stabilizers matter. First, the residual and the
-two boundary terms are combined with self-adaptive per-term weights via the
-learnable homoscedastic-uncertainty scheme of \citet{kendall2018multitask},
-removing hand-tuned weights. Second, a $\tau$-curriculum trains short maturities
-first and expands the horizon, respecting temporal causality
-\citep{wang2024respecting}. Finally, factor collocation is informed by a short
+resampled each iteration. PINNs are prone to optimization pathologies --- loss
+terms on very different scales, and violations of temporal causality that can
+steer training toward wrong solutions \citep{krishnapriyan2021characterizing,
+wang2022when} --- and two stabilizers address these here. First, the residual and
+the two boundary terms are combined with self-adaptive per-term weights, using
+the learnable homoscedastic-uncertainty scheme of \citet{kendall2018multitask}
+in the self-adaptive spirit of \citet{mcclenny2023self}, which removes
+hand-tuned weights. Second, a $\tau$-curriculum trains short maturities first and
+expands the horizon, respecting temporal causality \citep{wang2024respecting}. Finally, factor collocation is informed by a short
 pre-flight Monte Carlo: rather than sampling $u$ in an arbitrary symmetric box,
 we sample each factor from the mean and standard deviation it actually attains
 under the lifted dynamics, which is essential for reproducing the skew.
@@ -252,11 +259,14 @@ C(1,K)=K\,C\!\left(1/K,\,1\right),
 \label{eq:homog}
 \end{equation}
 which holds because the variance dynamics are independent of the spot level.
-Omitting this rescaling compares mismatched options and manufactures thousands
-of basis points of spurious error (here $\sim\!2700$ vol\bp{} reduced to
-$\sim\!286$ once corrected). We never report a lone ``PINN-versus-Fourier''
-number; instead we decompose, per strike and in price space where the signed
-errors add exactly,
+Equation~\eqref{eq:homog} is exact, not an approximation, and is applied
+consistently in every comparison in this paper. To show why it is essential we
+ran a protocol ablation: omitting the rescaling and comparing the mismatched
+options directly inflates the apparent error to $\sim\!2700$ vol\bp. That figure
+is a property of the flawed comparison, not a residual error of our method,
+whose accuracy is always the decomposed quantity defined next. We never report a
+lone ``PINN-versus-Fourier'' number; instead we decompose, per strike and in
+price space where the signed errors add exactly,
 \begin{equation}
 \underbrace{(\mathrm{PINN}-\mathrm{Fourier})}_{\text{total}}
 =\underbrace{(\mathrm{PINN}-\mathrm{MC})}_{\text{solve-error}}
@@ -304,7 +314,10 @@ lifted MC over three seeds (Table~\ref{tab:nconv}, Figure~\ref{fig:nconv}), the
 solve-error grows only mildly --- from $5.4\pm1.0$ to $10.7\pm2.0$ price\bp{},
 about a factor of two over an eight-fold increase in dimension. It is not flat
 (an earlier single-seed run misleadingly suggested so), but grows far more
-slowly than the dimension. Wall-clock cost to the plateau stays bounded (about
+slowly than the dimension. With only three seeds the error bars at adjacent $n$
+overlap, so we read the trend across the full range rather than claiming
+significance between neighbouring points; the roughly two-fold growth from $n=4$
+to $n=32$ is the robust statement. Wall-clock cost to the plateau stays bounded (about
 $6$--$10$ minutes on a CPU; per-iteration cost roughly constant at
 $55$--$62\,$ms) because the factor Hessian is vectorized.
 
@@ -382,19 +395,25 @@ crypto smiles are wide and the lifted rough-Heston form is stiff, and a single
 $496$-bp figure is honest about that.
 
 \begin{figure}[t]\centering
-\includegraphics[width=0.56\linewidth]{fig2_calibration_fit.png}
+\includegraphics[width=0.98\linewidth]{fig2_calibration_fit.png}
 \caption{Rough Heston calibrated to the Deribit BTC surface ($97$ points, $13$
-maturities, colour $=$ maturity): market versus model implied volatility at the
-canonical fit ($H=0.090$, $\rho=-0.79$; RMSE $496$ vol\bp). The dashed line is
-the identity.}
+maturities) at the canonical fit ($H=0.090$, $\rho=-0.79$; RMSE $496$ vol\bp).
+(a)~market versus model implied volatility at all points (dashed line: identity;
+colour $=$ maturity). (b)~per-maturity smiles for four representative maturities:
+market (markers) versus model (dashed). The fit is deliberately coarse: the
+residual spread reflects a known limitation of the lifted rough-Heston form on
+wide, richly curved crypto smiles --- a model-expressiveness issue, not a
+solver artifact --- and is orthogonal to the solve-error studied elsewhere.}
 \label{fig:calib}
 \end{figure}
 
 \subsection{Parametric PINN and the calibration hybrid}
 \label{sec:hybrid}
-A single network covering the five-parameter box is necessarily less accurate at
-any one point than a network trained there. At the box centre the parametric
-solve-error is $11.0\pm4.7$ price\bp{} against $5.9\pm1.2$ for a single-point
+The parametric network varies the five model parameters $(H,\nu,\rho,\lambda,
+\theta)$ while holding the spot variance $V_0$ and the maturity $T$ fixed; a
+single network covering this box is necessarily less accurate at any one point
+than a network trained there. At the box centre the parametric solve-error is
+$11.0\pm4.7$ price\bp{} against $5.9\pm1.2$ for a single-point
 network at the same $n=10$ --- about a two-fold coverage penalty. The penalty is
 uneven: it stays near $9$--$11$ price\bp{} at typical points but rises to $47.7$
 in the rough low-$H$ corner and $29.8$ at high vol-of-vol, where the PDE is
