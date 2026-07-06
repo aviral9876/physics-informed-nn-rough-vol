@@ -4,3 +4,15 @@ venv/
 figures/
 
 outputs/
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.log
+paper/*.bbl
+paper/*.blg
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+paper/pg-*.jpg
+paper/build.log
