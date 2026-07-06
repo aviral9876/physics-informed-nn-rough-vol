@@ -16,15 +16,39 @@
 Volatility: Meshfree Solution of the Markovian-Lifted PDE and Fast Parametric
 Calibration}}
 \author{\todo{Authors / affiliations}}
-\date{Draft: Introduction + Related Work + Methods + Results
-(Abstract and Discussion to follow)}
+\date{Complete draft (IMRAD). \today}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-\todo{Abstract --- single structured paragraph, no citations/figures, written
-last (Stage 4).}
+Rough volatility models fit equity and cryptocurrency option markets well but are
+non-Markovian, so they admit no finite-dimensional pricing partial differential
+equation (PDE). The Markovian lift recovers a PDE by approximating the fractional
+kernel with $n$ exponential factors, at the cost of raising the PDE dimension to
+$n{+}1$, which makes the problem a natural testbed for mesh-free neural solvers.
+We solve the lifted rough-Heston PDE with a physics-informed neural network
+(PINN) that minimizes the strong-form residual, using a hard-constrained initial
+condition, asymptotic boundary losses, self-adaptive loss weighting, a maturity
+curriculum, and Monte-Carlo-informed factor sampling. We validate by decomposing
+the error, in price space where the signed errors add exactly, into a
+\emph{solve-error} (the network versus an independent lifted Monte Carlo at the
+same $n$) and a \emph{lift-error} (lifted Monte Carlo versus the true model). Our
+main methodological result is that the solve-error grows only sub-linearly in the
+lifted dimension --- staying below about eleven price basis points up to $n{=}32$
+over three seeds --- whereas a naive full-tensor finite-difference grid grows as
+$50^{n+1}$ and is already infeasible by $n{=}8$; we are explicit that structured
+grid schemes fare better but remain impractical for this PDE. The solve/lift
+crossover yields a concrete rule for choosing $n$, which shifts to larger $n$ at
+longer maturities. Calibrated to real Bitcoin options, the model returns a rough
+Hurst exponent (about $0.09$) with strong negative correlation. Finally, a
+parametric PINN that takes the model parameters as inputs enables gradient-based
+recalibration; although the network alone is too inaccurate for production
+calibration, using it to warm-start a short local optimization against the true
+pricer reaches from-scratch fit quality at roughly nine times fewer true-model
+evaluations. Mesh-free PINNs thus scale gracefully in the lifted dimension where
+grids cannot, and are most valuable as a differentiable warm-start for
+calibration.
 \end{abstract}
 
 \noindent\textbf{Keywords:} physics-informed neural networks; rough volatility;
@@ -418,7 +442,68 @@ inaccurate.}
 
 % =====================================================================
 \section{Discussion}
-\todo{Discussion --- written last (Stage 4).}
+
+\paragraph{Interpretation of the scaling result.}
+The central finding is that the network's own error in solving the lifted PDE
+degrades only gently as the PDE dimension grows, while grid-based solvers become
+impossible. We deliberately state this in its weak, honest form. The solve-error
+is not constant in $n$ --- a claim an early single-seed experiment appeared to
+support but which three-seed statistics refuted --- it grows sub-linearly,
+roughly doubling from $n=4$ to $n=32$. Likewise, the exponential $50^{n+1}$
+count is the \emph{naive} full-tensor grid; sparse grids, ADI, and tensor-train
+methods reach higher dimensions, so the defensible claim is that a competitive
+finite-difference solve for the lifted rough-volatility PDE at $n=16$--$32$ is
+impractical, not impossible. Even in this conservative form, the contrast ---
+sub-linear error growth and bounded wall-clock against a grid that cannot be
+stored --- is a concrete instance of the curse-of-dimensionality advantage that
+motivates mesh-free neural PDE solvers.
+
+\paragraph{The solve/lift decomposition as a general lesson.}
+A recurring hazard when a surrogate replaces an exact solver is to validate the
+surrogate against the wrong reference. The network solves the finite-$n$ lifted
+PDE, whose exact solution is the lifted Monte Carlo, not the true ($n\to\infty$)
+model; comparing directly to the true model conflates the network's solve-error
+with the model-approximation (lift) error. We found the two are of opposite sign
+and that the historical ``PINN-versus-truth'' gap was dominated by the lift, not
+the network. The remedy --- validate against a same-fidelity reference and report
+the two errors separately --- and the resulting crossover rule for the
+approximation order are not specific to rough volatility; they apply to any
+surrogate built on a controllable model reduction, and we would encourage their
+use whenever a learned solver sits on top of an approximated operator.
+
+\paragraph{Calibration and the role of the parametric network.}
+The applied study is honest about a negative result and its resolution. A single
+network spread over a five-parameter box is markedly less accurate than a
+point-trained one, worst in the rough, high-vol-of-vol corners where the PDE is
+stiffest, and calibrating with it alone is fast but unreliable --- it fits its
+own imperfect prices, and the single-slice optimum can fall outside the training
+box. The parametric network nonetheless earns its keep as a differentiable warm
+start: seeding a short local optimization against the true pricer with its guess
+recovers from-scratch calibration quality at about an order of magnitude fewer
+true-model evaluations. The value proposition is therefore amortized ---
+train once, then recalibrate cheaply --- with the true pricer retained in the
+loop only for a brief, decisive polish.
+
+\paragraph{Limitations.}
+Our evidence rests on a single market snapshot (one Deribit BTC surface), and the
+parametric and calibration studies use a single maturity slice; timings are
+single-machine CPU figures at moderate training budgets. The parametric network
+fixes $V_0$ and the maturity, its calibration fit to the wide crypto smile is
+coarse ($496$ vol bp at the surface level), and its solve-error carries a mild
+directional bias (a slight over-pricing of at-the-money and call strikes that
+grows with $n$). We study $n\le32$; the sub-linear trend need not persist
+arbitrarily far.
+
+\paragraph{Future work.}
+Several extensions are natural: adding the maturity as a network input to price
+whole surfaces rather than single slices; wider and deeper networks with GPU
+training to shrink the parametric corner penalty and to test the scaling to
+larger $n$; transfer to other rough models (for example rough Bergomi) and to
+American or path-dependent payoffs; and a systematic study of the warm-start
+polish across market regimes. We would also like to characterize the high-$n$
+solve-bias and whether it can be removed by loss reweighting or a residual
+correction, and to benchmark the mesh-free approach directly against structured
+finite-difference schemes at moderate $n$ where the latter remain feasible.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
