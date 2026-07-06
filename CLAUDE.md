@@ -141,11 +141,13 @@ factor sampling + lifted-forward-variance baseline (3), and the parametric PINN
    (H,nu,rho,lam,theta) as inputs (n=10, V0 & T fixed). Solve-error ~2x the
    single-point net at the box centre (11 vs 6 px bp), worse in the rough low-H /
    high-nu corners. Calibrates the BTC T~0.15 slice 11-245x FASTER than the
-   Fourier loop (1-16 s vs ~180 s, zero Fourier calls) -- BUT fit quality is NOT
-   yet comparable: the net calibrates to its own imperfect prices, so its
-   fitted params score 362 vol bp under the true Fourier pricer vs 45 bp for the
-   Fourier loop. Speed claim holds; quality needs a better-trained/wider net or a
-   PINN-warm-start + Fourier-polish hybrid. See pinn-task5-parametric memo.
+   Fourier loop (1-16 s vs ~180 s, zero Fourier calls) -- BUT PINN-only fit
+   quality is poor (net calibrates to its own imperfect prices + a box that
+   doesn't contain the T=0.15-slice optimum). RESOLUTION (demo_task5_hybrid.py):
+   PINN single-shot warm-start -> local Fourier polish reaches NEAR from-scratch
+   fit (29+-7 vs 24 vol bp) at ~9x FEWER Fourier evals (237 vs 2018) and ~7x
+   faster -- so the parametric PINN's applied value is as a calibration WARM-START,
+   not a standalone pricer. See pinn-task5-parametric memo.
 
 ## How to verify you fixed the PINN
 
