@@ -111,6 +111,12 @@ The whole reason for moving here: the earlier environment had 3-minute run caps
 and OOM-killed background jobs, so the PINN could never train properly. You do
 not have those limits. Fix the PINN:
 
+STATUS: items 1-3 and 5 DONE; item 4 partially (validated 3-seed at width<=80,
+GPU/100k not needed on CPU). See the PINN STATUS block above + the memos. In
+short: boundary losses (1), adaptive weights + tau-curriculum (2), MC-informed
+factor sampling + lifted-forward-variance baseline (3), and the parametric PINN
+(5, parametric_pinn.py) all landed; validation is now decomposed solve-vs-lift.
+
 1. **Boundary/asymptotic losses (BIGGEST WIN).** The wing blow-up is unanchored
    boundaries. Add loss terms enforcing:
      - P -> 0                         as S -> 0   (deep OTM call)
@@ -131,9 +137,15 @@ not have those limits. Fix the PINN:
    validate vs Fourier PER MATURITY and target single-digit vol bp ATM,
    <50 bp across the traded strike range.
 
-5. **Parametric PINN (thesis headline).** Add (H, nu, rho, ...) as network
-   INPUTS so one trained net prices across the whole parameter space -> instant
-   recalibration. Compare calibration speed to the Fourier-in-the-loop baseline.
+5. **Parametric PINN (thesis headline).** DONE -- parametric_pinn.py adds
+   (H,nu,rho,lam,theta) as inputs (n=10, V0 & T fixed). Solve-error ~2x the
+   single-point net at the box centre (11 vs 6 px bp), worse in the rough low-H /
+   high-nu corners. Calibrates the BTC T~0.15 slice 11-245x FASTER than the
+   Fourier loop (1-16 s vs ~180 s, zero Fourier calls) -- BUT fit quality is NOT
+   yet comparable: the net calibrates to its own imperfect prices, so its
+   fitted params score 362 vol bp under the true Fourier pricer vs 45 bp for the
+   Fourier loop. Speed claim holds; quality needs a better-trained/wider net or a
+   PINN-warm-start + Fourier-polish hybrid. See pinn-task5-parametric memo.
 
 ## How to verify you fixed the PINN
 
