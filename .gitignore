@@ -16,3 +16,6 @@ paper/*.fdb_latexmk
 paper/*.synctex.gz
 paper/pg-*.jpg
 paper/build.log
+
+# stray local backup copy of the paper (kept on disk, not tracked)
+paper - Copy/
