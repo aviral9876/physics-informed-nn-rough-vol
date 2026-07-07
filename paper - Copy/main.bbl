@@ -1,0 +1,170 @@
+\begin{thebibliography}{22}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Abi~Jaber(2019)]{abijaber2019lifting}
+E.~Abi~Jaber.
+\newblock Lifting the {H}eston model.
+\newblock \emph{Quantitative Finance}, 19\penalty0 (12):\penalty0 1995--2013,
+  2019.
+\newblock \doi{10.1080/14697688.2019.1615113}.
+
+\bibitem[Abi~Jaber and El~Euch(2019)]{abijaber2019multifactor}
+E.~Abi~Jaber and O.~El~Euch.
+\newblock Multifactor approximation of rough volatility models.
+\newblock \emph{SIAM Journal on Financial Mathematics}, 10\penalty0
+  (2):\penalty0 309--349, 2019.
+\newblock \doi{10.1137/18M1170236}.
+
+\bibitem[Bayer et~al.(2016)Bayer, Friz, and Gatheral]{bayer2016pricing}
+C.~Bayer, P.~Friz, and J.~Gatheral.
+\newblock Pricing under rough volatility.
+\newblock \emph{Quantitative Finance}, 16\penalty0 (6):\penalty0 887--904,
+  2016.
+\newblock \doi{10.1080/14697688.2015.1099717}.
+
+\bibitem[Bayer et~al.(2019)Bayer, Horvath, Muguruza, Stemper, and
+  Tomas]{bayer2019deep}
+C.~Bayer, B.~Horvath, A.~Muguruza, B.~Stemper, and M.~Tomas.
+\newblock On deep calibration of (rough) stochastic volatility models, 2019.
+\newblock Preprint, arXiv:1908.08806.
+
+\bibitem[Bennedsen et~al.(2022)Bennedsen, Lunde, and
+  Pakkanen]{bennedsen2022decoupling}
+M.~Bennedsen, A.~Lunde, and M.~S. Pakkanen.
+\newblock Decoupling the short- and long-term behavior of stochastic
+  volatility.
+\newblock \emph{Journal of Financial Econometrics}, 20\penalty0 (5):\penalty0
+  961--1006, 2022.
+\newblock \doi{10.1093/jjfinec/nbaa049}.
+
+\bibitem[Carr and Madan(1999)]{carr1999option}
+P.~Carr and D.~B. Madan.
+\newblock Option valuation using the fast {F}ourier transform.
+\newblock \emph{Journal of Computational Finance}, 2\penalty0 (4):\penalty0
+  61--73, 1999.
+\newblock \doi{10.21314/JCF.1999.043}.
+
+\bibitem[Comte and Renault(1998)]{comte1998long}
+F.~Comte and E.~Renault.
+\newblock Long memory in continuous-time stochastic volatility models.
+\newblock \emph{Mathematical Finance}, 8\penalty0 (4):\penalty0 291--323, 1998.
+\newblock \doi{10.1111/1467-9965.00057}.
+
+\bibitem[El~Euch and Rosenbaum(2019)]{eleuch2019characteristic}
+O.~El~Euch and M.~Rosenbaum.
+\newblock The characteristic function of rough {H}eston models.
+\newblock \emph{Mathematical Finance}, 29\penalty0 (1):\penalty0 3--38, 2019.
+\newblock \doi{10.1111/mafi.12173}.
+
+\bibitem[El~Euch et~al.(2018)El~Euch, Fukasawa, and
+  Rosenbaum]{eleuch2018microstructural}
+O.~El~Euch, M.~Fukasawa, and M.~Rosenbaum.
+\newblock The microstructural foundations of leverage effect and rough
+  volatility.
+\newblock \emph{Finance and Stochastics}, 22\penalty0 (2):\penalty0 241--280,
+  2018.
+\newblock \doi{10.1007/s00780-018-0360-z}.
+
+\bibitem[Gatheral et~al.(2018)Gatheral, Jaisson, and
+  Rosenbaum]{gatheral2018volatility}
+J.~Gatheral, T.~Jaisson, and M.~Rosenbaum.
+\newblock Volatility is rough.
+\newblock \emph{Quantitative Finance}, 18\penalty0 (6):\penalty0 933--949,
+  2018.
+\newblock \doi{10.1080/14697688.2017.1393551}.
+
+\bibitem[Han et~al.(2018)Han, Jentzen, and E]{han2018solving}
+J.~Han, A.~Jentzen, and W.~E.
+\newblock Solving high-dimensional partial differential equations using deep
+  learning.
+\newblock \emph{Proceedings of the National Academy of Sciences}, 115\penalty0
+  (34):\penalty0 8505--8510, 2018.
+\newblock \doi{10.1073/pnas.1718942115}.
+
+\bibitem[Heston(1993)]{heston1993closed}
+S.~L. Heston.
+\newblock A closed-form solution for options with stochastic volatility with
+  applications to bond and currency options.
+\newblock \emph{Review of Financial Studies}, 6\penalty0 (2):\penalty0
+  327--343, 1993.
+\newblock \doi{10.1093/rfs/6.2.327}.
+
+\bibitem[Horvath et~al.(2021)Horvath, Muguruza, and Tomas]{horvath2021deep}
+B.~Horvath, A.~Muguruza, and M.~Tomas.
+\newblock Deep learning volatility: a deep neural network perspective on
+  pricing and calibration in (rough) volatility models.
+\newblock \emph{Quantitative Finance}, 21\penalty0 (1):\penalty0 11--27, 2021.
+\newblock \doi{10.1080/14697688.2020.1817974}.
+
+\bibitem[Jacquier and Zuri\v{c}(2023)]{jacquier2023random}
+A.~Jacquier and \v{Z}. Zuri\v{c}.
+\newblock Random neural networks for rough volatility, 2023.
+\newblock Preprint, arXiv:2305.01035.
+
+\bibitem[Kendall et~al.(2018)Kendall, Gal, and Cipolla]{kendall2018multitask}
+A.~Kendall, Y.~Gal, and R.~Cipolla.
+\newblock Multi-task learning using uncertainty to weigh losses for scene
+  geometry and semantics.
+\newblock \emph{IEEE Conference on Computer Vision and Pattern Recognition
+  (CVPR)}, pages 7482--7491, 2018.
+\newblock \doi{10.1109/CVPR.2018.00781}.
+
+\bibitem[Krishnapriyan et~al.(2021)Krishnapriyan, Gholami, Zhe, Kirby, and
+  Mahoney]{krishnapriyan2021characterizing}
+A.~S. Krishnapriyan, A.~Gholami, S.~Zhe, R.~M. Kirby, and M.~W. Mahoney.
+\newblock Characterizing possible failure modes in physics-informed neural
+  networks.
+\newblock \emph{Advances in Neural Information Processing Systems (NeurIPS)},
+  34:\penalty0 26548--26560, 2021.
+
+\bibitem[McClenny and Braga-Neto(2023)]{mcclenny2023self}
+L.~D. McClenny and U.~M. Braga-Neto.
+\newblock Self-adaptive physics-informed neural networks.
+\newblock \emph{Journal of Computational Physics}, 474:\penalty0 111722, 2023.
+\newblock \doi{10.1016/j.jcp.2022.111722}.
+
+\bibitem[Papapantoleon and Rou(2025)]{papapantoleon2025timestepping}
+A.~Papapantoleon and J.~Rou.
+\newblock A time-stepping deep gradient flow method for option pricing in
+  (rough) diffusion models.
+\newblock \emph{Quantitative Finance}, 25\penalty0 (12):\penalty0 2009--2020,
+  2025.
+\newblock \doi{10.1080/14697688.2025.2572318}.
+
+\bibitem[Raissi et~al.(2019)Raissi, Perdikaris, and
+  Karniadakis]{raissi2019physics}
+M.~Raissi, P.~Perdikaris, and G.~E. Karniadakis.
+\newblock Physics-informed neural networks: A deep learning framework for
+  solving forward and inverse problems involving nonlinear partial differential
+  equations.
+\newblock \emph{Journal of Computational Physics}, 378:\penalty0 686--707,
+  2019.
+\newblock \doi{10.1016/j.jcp.2018.10.045}.
+
+\bibitem[Sirignano and Spiliopoulos(2018)]{sirignano2018dgm}
+J.~Sirignano and K.~Spiliopoulos.
+\newblock {DGM}: A deep learning algorithm for solving partial differential
+  equations.
+\newblock \emph{Journal of Computational Physics}, 375:\penalty0 1339--1364,
+  2018.
+\newblock \doi{10.1016/j.jcp.2018.08.029}.
+
+\bibitem[Wang et~al.(2022)Wang, Yu, and Perdikaris]{wang2022when}
+S.~Wang, X.~Yu, and P.~Perdikaris.
+\newblock When and why {PINN}s fail to train: a neural tangent kernel
+  perspective.
+\newblock \emph{Journal of Computational Physics}, 449:\penalty0 110768, 2022.
+\newblock \doi{10.1016/j.jcp.2021.110768}.
+
+\bibitem[Wang et~al.(2024)Wang, Sankaran, and Perdikaris]{wang2024respecting}
+S.~Wang, S.~Sankaran, and P.~Perdikaris.
+\newblock Respecting causality for training physics-informed neural networks.
+\newblock \emph{Computer Methods in Applied Mechanics and Engineering},
+  421:\penalty0 116813, 2024.
+\newblock \doi{10.1016/j.cma.2024.116813}.
+
+\end{thebibliography}

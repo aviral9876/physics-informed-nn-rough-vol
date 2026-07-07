@@ -417,21 +417,20 @@ climbs to $47.7$ in the rough, low-$H$ corner and $29.8$ at high vol-of-vol, whe
 the PDE is stiffest. We report this plainly; a larger training budget would narrow
 the corner gap.
 
-The three calibration routes tell a nuanced story, and we report each result
-plainly (Table~\ref{tab:calib}, Figure~\ref{fig:hybrid}). Fourier-in-the-loop
-reaches $23.7$ vol\bp{}, at a cost of $2018$ Fourier evaluations and about
-$168$ s. The parametric PINN on its own is almost free---about $2$ s, zero
-Fourier calls---yet its fit is poor, $222\pm20$ vol\bp{} under the true model,
-both because it calibrates to its own imperfect prices and because this
-single-slice optimum happens to fall \emph{outside} the training box (it prefers
-$\nu\approx0.87$, $\theta\approx0.39$). We therefore would not recommend the
-standalone network as a calibrator. It does, however, make an effective starting
-point: seeding the local Fourier polish with the PINN's guess reaches
-$29.4\pm7.1$ vol\bp{}---on par with from-scratch on a $34$--$52\%$ smile---in only
-$237\pm46$ Fourier evaluations and about $23$ s. That is roughly nine times fewer
-true-model calls and seven times faster for the same practical fit, so the
-parametric network is most useful not as a pricer but as a differentiable warm
-start.
+This is where a less careful paper would oversell. Calibrating the BTC
+$T\approx0.15$ slice three ways (Table~\ref{tab:calib}, Figure~\ref{fig:hybrid})
+tells the honest story. Fourier-in-the-loop reaches $23.7$ vol\bp{}, but pays
+$2018$ Fourier evaluations and about $168$ s. The parametric PINN on its own is
+almost free---about $2$ s, zero Fourier calls---but its fit is poor, $222\pm20$
+vol\bp{} under the true model, because it calibrates to its own imperfect prices
+and, tellingly, because this single-slice optimum falls \emph{outside} the
+training box (it wants $\nu\approx0.87$, $\theta\approx0.39$). So we do not sell
+the standalone network. Instead we use it as a launch point: seed the local
+Fourier polish with the PINN's guess, and it reaches $29.4\pm7.1$ vol\bp{}---on par
+with from-scratch on a $34$--$52\%$ smile---in only $237\pm46$ Fourier evaluations
+and about $23$ s. That is roughly nine times fewer true-model calls and seven
+times faster, for the same practical fit. The parametric network earns its keep
+not as a pricer but as a differentiable warm start.
 
 \begin{table}[t]\centering
 \caption{Calibration of the BTC $T\approx0.15$ slice, three ways (3 PINN seeds;
