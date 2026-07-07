@@ -19,3 +19,15 @@ paper/build.log
 
 # stray local backup copy of the paper (kept on disk, not tracked)
 paper - Copy/
+
+# QF letter build artifacts
+paper_qf/*.aux
+paper_qf/*.log
+paper_qf/*.bbl
+paper_qf/*.blg
+paper_qf/*.out
+paper_qf/*.fls
+paper_qf/*.fdb_latexmk
+paper_qf/*.synctex.gz
+paper_qf/*.jpg
+paper_qf/build.log
