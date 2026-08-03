@@ -31,3 +31,29 @@ paper_qf/*.fdb_latexmk
 paper_qf/*.synctex.gz
 paper_qf/*.jpg
 paper_qf/build.log
+
+# EAAI paper build artifacts
+paper_eaai/*.aux
+paper_eaai/*.log
+paper_eaai/*.bbl
+paper_eaai/*.blg
+paper_eaai/*.out
+paper_eaai/*.fls
+paper_eaai/*.fdb_latexmk
+paper_eaai/*.synctex.gz
+paper_eaai/*.spl
+
+# CNSNS paper build artifacts
+paper_cnsns/*.aux
+paper_cnsns/*.log
+paper_cnsns/*.bbl
+paper_cnsns/*.blg
+paper_cnsns/*.out
+paper_cnsns/*.fls
+paper_cnsns/*.fdb_latexmk
+paper_cnsns/*.synctex.gz
+paper_cnsns/*.spl
+
+# stray local artifacts (kept on disk, not tracked)
+paper/main - Copy.pdf
+texput.log

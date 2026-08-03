@@ -1,0 +1,821 @@
+%% EAAI V3 — Engineering Applications of Artificial Intelligence
+%% Document class: elsarticle (Elsevier); compiled with pdflatex.
+%% At submission use option [review] for double-blind; switch to [preprint]
+%% for the accepted-manuscript deposit.
+\documentclass[review,12pt]{elsarticle}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{../figures/}}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{siunitx}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\bp}{\ensuremath{\,\mathrm{bp}}}
+\newcommand{\todo}[1]{\textcolor{red}{[#1]}}
+
+%% Journal information (filled at submission)
+\journal{Engineering Applications of Artificial Intelligence}
+
+%% ---------------------------------------------------------------
+\begin{document}
+
+\begin{frontmatter}
+
+\title{A Physics-Informed Neural Network for Option Pricing under Rough
+Volatility: Architecture, Dimension Scaling, and Fast Parametric Calibration
+via the Markovian-Lifted PDE}
+
+\author[cu]{Aviral Sharma\corref{cor}}
+\ead{aviral98765@gmail.com}
+\author[sgt]{Kamal Preet Singh}
+\author[ind]{Vipul Sharma}
+
+\cortext[cor]{Corresponding author}
+\affiliation[cu]{organization={Chandigarh University},
+              city={Chandigarh}, country={India}}
+\affiliation[sgt]{organization={SGT University},
+              city={Gurugram}, country={India}}
+\affiliation[ind]{organization={Independent Researcher}, country={India}}
+
+%% ----- Highlights (3-5 bullets, max 85 characters each) --------
+\begin{highlights}
+\item A PINN solves the $(n{+}1)$-dimensional Markovian-lifted rough-Heston PDE
+      without a computational grid.
+\item Solve-error grows sub-linearly in the lifted dimension ($<11\,\mathrm{px\,bp}$
+      to $n{=}32$) while grid methods become infeasible.
+\item Explicit error decomposition separates network accuracy from model
+      approximation, yielding a principled rule for choosing $n$.
+\item A parametric PINN over five model parameters warm-starts calibration at
+      ${\sim}9\times$ fewer true-model evaluations.
+\item Four stabilising design choices are identified, implemented, and ablated.
+\end{highlights}
+
+%% ----- Abstract ------------------------------------------------
+\begin{abstract}
+Rough-volatility models capture empirical features of equity and cryptocurrency
+option markets that classical models cannot, but they carry a severe computational
+penalty: the variance is non-Markovian, and there is no finite-dimensional pricing
+partial differential equation (PDE) to solve.  The Markovian lift recovers a PDE
+by approximating the fractional variance kernel with $n$ exponentials, at the cost
+of turning a two-dimensional problem into an $(n{+}1)$-dimensional one.  We solve
+this high-dimensional lifted PDE with a physics-informed neural network (PINN)---a
+fully connected, $\tanh$-activated multilayer perceptron trained by minimising the
+strong-form PDE residual at randomly sampled collocation points---and ask a sharp
+engineering question: does the network's accuracy degrade as the lifted dimension
+grows, in the same way a finite-difference grid would?  It does not.  Measuring
+the network's solve-error against an independent lifted Monte Carlo at the same $n$,
+and separating it cleanly from the model-approximation lift-error, we find the
+solve-error grows only sub-linearly: from $5.4\pm1.0$ to $10.7\pm2.0$ price basis
+points as $n$ climbs from 4 to 32, while the naive grid requires $50^{n+1}$ points
+and is infeasible by $n{=}8$.  We detail four architecture and training decisions
+that are essential for stable convergence: a hard-constrained initial-condition
+ansatz, an integrated-variance baseline anchor, self-adaptive loss weighting, and a
+causal $\tau$-curriculum.  We also build a parametric PINN that accepts the five
+rough-Heston parameters as additional network inputs; while too coarse to calibrate
+independently, it provides a warm start that, combined with a short local
+true-model refinement, recovers full calibration quality at approximately nine times
+fewer exact-pricer evaluations.  All experiments use live Bitcoin option data from
+the Deribit exchange, returning a genuinely rough Hurst exponent ($H\approx0.09$)
+with strong negative correlation ($\rho\approx-0.79$).
+\end{abstract}
+
+\begin{keyword}
+Physics-informed neural networks \sep rough volatility \sep Markovian lift \sep
+option pricing \sep curse of dimensionality \sep model calibration \sep
+deep learning \sep scientific machine learning
+\end{keyword}
+
+\end{frontmatter}
+
+% ================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Every derivative-pricing problem is, at its core, a PDE.  For the classical models
+of quantitative finance that PDE is low-dimensional and a finite-difference grid
+dispatches it in milliseconds.  Rough volatility breaks this comfortable picture.
+Motivated by the empirical roughness of realised variance
+\citep{gatheral2018volatility,bennedsen2022decoupling} and the steep short-maturity
+skew that classical stochastic-volatility models such as \citet{heston1993closed}
+cannot reproduce, and with microstructural foundations in high-frequency trading
+dynamics \citep{eleuch2018microstructural}, rough-volatility models drive the
+variance with a fractional noise whose Hurst exponent $H<1/2$.  That single
+fact---whose lineage runs back to long-memory volatility \citep{comte1998long}---makes
+the variance process neither Markovian nor a semimartingale, leaving
+\emph{no} finite-dimensional pricing PDE to discretise at all
+\citep{gatheral2018volatility,eleuch2019characteristic}.
+
+The standard engineering escape is the \emph{Markovian lift}: approximate the
+fractional kernel by a sum of $n$ exponentials and recover a genuine
+$(n{+}1)$-dimensional PDE \citep{abijaber2019multifactor,abijaber2019lifting}.  The
+lift is an approximation whose quality improves with $n$---the relative $L^2$ kernel
+error falls from $25.6\%$ at $n{=}5$ to $0.39\%$ at $n{=}100$---but it couples the
+approximation-order knob $n$ directly to the PDE dimension.  That coupling makes
+the lifted PDE a clean engineering stress-test for mesh-free neural solvers: as we
+turn $n$ up to improve model fidelity, does the solver hold?
+
+Physics-informed neural networks (PINNs) are built for this setting.  Rather than
+laying down a grid, a PINN represents the price as a neural network and trains it
+to satisfy the PDE at randomly sampled collocation points
+\citep{raissi2019physics}.  Because nothing in the method scales with a
+grid, it sidesteps the exponential blow-up that kills finite differences in high
+dimensions, in the same way as the deep Galerkin and deep BSDE solvers
+\citep{sirignano2018dgm,han2018solving}.  For pricing it brings two further
+engineering advantages: the physics is known exactly, so no labelled prices are
+needed during training; and the trained network is differentiable in its inputs,
+which we exploit to calibrate by gradient descent.
+
+We develop, validate, and characterise a PINN for the lifted rough-Heston PDE and
+test it throughout on Bitcoin (BTC) options---a liquid, high-skew market that, as
+we show, calibrates to a firmly rough Hurst exponent.  Our concrete engineering
+contributions are as follows.
+
+\begin{enumerate}
+
+\item \textbf{A complete, reproducible PINN implementation for the lifted PDE.}
+We describe the architecture, training stabilisers, and collocation strategy in
+full detail (Section~\ref{sec:arch}), identify the four design choices that are
+individually necessary for stable convergence, and make the full PyTorch
+implementation available.
+
+\item \textbf{A dimension-scaling result.}  The network's solve-error---how well
+it actually solves the PDE it is handed---grows only sub-linearly as the lifted
+dimension climbs, staying below roughly eleven price basis points out to $n{=}32$,
+while a naive full-tensor finite-difference grid ($50^{n+1}$ points) is already
+infeasible by $n{=}8$.  We are deliberately fair about the comparison: $50^{n+1}$
+is the naive grid; structured schemes do better but still degrade with $n$.  The
+honest engineering verdict is that a competitive grid solve at $n{=}16$--$32$ is
+\emph{impractical}, not impossible.
+
+\item \textbf{An error decomposition and a practical rule for choosing $n$.}
+We split the total pricing error into the part the network controls
+(solve-error, measured against a lifted Monte Carlo at the same $n$) and the
+part only more factors can fix (lift-error, measured against the exact Fourier
+pricer).  Their crossover gives a concrete, maturity-dependent rule for the factor
+count.
+
+\item \textbf{A real-market calibration.}  Fit to live Deribit BTC surface data,
+rough Heston returns a rough Hurst exponent and strong negative correlation.
+
+\item \textbf{Fast recalibration, honestly stated.}  A parametric PINN plus a
+warm-start hybrid recovers from-scratch calibration quality at approximately nine
+times fewer exact-model evaluations; we are explicit about where the standalone
+parametric network falls short.
+
+\end{enumerate}
+
+We are explicit about what is \emph{not} new.  \citet{papapantoleon2025timestepping}
+solved the lifted rough-Heston PDE with a mesh-free network before us.  Our
+contribution is a residual PINN formulation, a quantitative scaling-and-decomposition
+analysis, a real-market calibration, and the recalibration hybrid.
+
+% ================================================================
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Closest prior work.}
+\citet{papapantoleon2025timestepping} price European options in rough-diffusion
+models by recasting the pricing PDE as an energy-minimisation problem and
+approximating it in a time-stepping deep gradient flow, demonstrated on the lifted
+Heston model.  Their method is the closest to ours in both target and spirit;
+it differs in mechanism (time-stepping variational scheme versus residual PINN)
+and does not study dimension scaling, error decomposition, or the recalibration
+workflow.
+
+\paragraph{Neural solvers for rough volatility.}
+\citet{jacquier2023random} cast the path-dependent pricing equations as backward
+SDEs and solve them with a random-feature network, which reduces training to a
+least-squares regression.  They share the target but not the mechanism, and
+dimension scaling and calibration speed are not studied.
+
+\paragraph{Deep calibration surrogates.}
+The dominant approach for fast rough-volatility calibration is the supervised
+surrogate of \citet{bayer2019deep} and \citet{horvath2021deep}: a network trained
+offline on precomputed prices or implied volatilities, used as a fast pricing map
+inside the calibration loop.  It is purely data-driven; the network never sees the
+governing equation, carries no PDE consistency, and cannot warm-start a
+physics-based polish the way ours can.
+
+\paragraph{PINN training pathologies and remedies.}
+PINNs are well-known to fail when loss terms sit on different scales or when
+temporal causality is violated \citep{krishnapriyan2021characterizing,wang2022when}.
+The two stabilisers we use---self-adaptive homoscedastic-uncertainty weights
+\citep{kendall2018multitask,mcclenny2023self} and a causal $\tau$-curriculum
+\citep{wang2024respecting}---address these failure modes.
+
+\paragraph{Foundational methods.}
+We build on PINNs \citep{raissi2019physics} and deep PDE solvers
+\citep{sirignano2018dgm,han2018solving}; on rough volatility
+\citep{gatheral2018volatility,eleuch2019characteristic} and its multifactor
+Markovian lift \citep{abijaber2019multifactor,abijaber2019lifting}; and on
+classical transform pricing \citep{heston1993closed,carr1999option} for our
+independent ground truth.
+
+% ================================================================
+\section{Problem formulation}
+\label{sec:problem}
+
+\subsection{Rough Heston and the Markovian lift}
+Under rough Heston the spot price $S$ and its instantaneous variance $V$ satisfy
+\begin{align}
+  dS_t &= \sqrt{V_t}\,S_t\,dW^S_t, \\
+  V_t  &= V_0 + \int_0^t K(t-s)\,\lambda(\theta - V_s)\,ds
+          + \int_0^t K(t-s)\,\nu\sqrt{V_s}\,dW^V_s,
+\end{align}
+where $W^S, W^V$ are Brownian motions with correlation $\rho$, and
+$K(t)=t^{\alpha-1}/\Gamma(\alpha)$ is the fractional kernel with
+$\alpha=H+\tfrac12$ and $H<\tfrac12$ \citep{gatheral2018volatility,eleuch2019characteristic}.
+The variance is a Volterra process: non-Markovian, non-semimartingale, and
+admitting no finite-dimensional PDE.
+
+The Markovian lift replaces $K$ with
+$K(t)\approx\sum_{i=1}^{n}c_i e^{-x_i t}$, introducing $n$
+Ornstein--Uhlenbeck factors $U^i$ with $dU^i_t = -x_i U^i_t\,dt + \sqrt{V_t}\,dW^V_t$
+and $V_t = V_0 + \sum_i c_i U^i_t$
+\citep{abijaber2019multifactor,abijaber2019lifting}.  The weights $(c_i,x_i)$
+are placed on a geometric quadrature grid \citep{abijaber2019multifactor}; the
+relative $L^2$ kernel error falls monotonically from $25.6\%$ at $n{=}5$ to
+$0.39\%$ at $n{=}100$, so raising $n$ genuinely buys model fidelity.
+
+\subsection{The lifted pricing PDE}
+The discounted European call price $P(t,x,u)$, where $x=\log S$ and
+$u=(u_1,\ldots,u_n)$ collects the factor values, satisfies the
+$(n{+}1)$-dimensional backward Kolmogorov PDE
+\begin{align}
+  0 = {}& P_t + \!\left(r-\tfrac12 V\right)P_x + \tfrac12 V\,P_{xx}
+         + \sum_{i=1}^{n}\!\left[-x_i u_i + \lambda(\theta-V)\right]P_{u_i}
+         \nonumber\\
+        & + \tfrac12\nu^2 V\sum_{i,j=1}^{n}P_{u_i u_j}
+         + \rho\nu V\sum_{i=1}^{n} P_{x u_i} - rP ,
+  \label{eq:pde}
+\end{align}
+with terminal condition $P(T,x,u)=\max(e^x - K, 0)$.
+Because all factors share the single Brownian motion $W^V$, the full
+double sum over $(i,j)$ and the $(n{+}1)$-dimensional cross term both appear;
+the PDE dimension is exactly $n{+}1$.  At $n{=}4$ this is a five-dimensional
+PDE; at $n{=}32$ it is thirty-three.
+
+% ================================================================
+\section{Network architecture and training}
+\label{sec:arch}
+
+\subsection{Baseline network}
+We represent the price as a fully connected multilayer perceptron (MLP).  Every
+hidden unit uses the $\tanh$ activation, which provides smooth, high-order
+derivatives needed for automatic differentiation of the PDE residual; $\tanh$ is
+standard for PINN residual training and avoids the dead-neuron pathology of ReLU
+in the high-derivative setting \citep{raissi2019physics}.  All weight matrices are
+initialised with Xavier normal initialisation \citep{glorot2010understanding}
+and all biases with zeros.
+
+The network maps
+$(\tau, x, u_1,\ldots,u_n) \in \mathbb{R}^{2+n}$ to a scalar correction.  For the
+single-point PINN (parameters fixed) we use width $W{=}64$ and depth $D{=}4$ hidden
+layers; for the parametric PINN (five model parameters as additional inputs,
+Section~\ref{sec:parametric}) we increase to $W{=}96$, $D{=}5$.
+Table~\ref{tab:arch} summarises all architectural and training hyperparameters.
+
+\begin{table}[t]
+\centering
+\caption{Architecture and training hyperparameters.  Values in parentheses are
+for the parametric PINN (Section~\ref{sec:parametric}).}
+\label{tab:arch}
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Value} \\
+\midrule
+\multicolumn{2}{l}{\textit{Architecture}} \\
+Network type & Fully connected MLP \\
+Hidden layers & 4 (5 for parametric) \\
+Neurons per layer & 64 (96 for parametric) \\
+Activation & $\tanh$ (all hidden layers) \\
+Weight initialisation & Xavier normal \\
+Bias initialisation & Zero \\
+Input dimension & $2 + n$ for single-point; $2 + n + 5$ for parametric \\
+Output dimension & 1 (price correction $N_\theta$) \\
+Floating-point precision & \texttt{float64} (PyTorch) \\
+\midrule
+\multicolumn{2}{l}{\textit{Optimisation}} \\
+Optimiser & Adam \citep{kingma2015adam} \\
+Initial learning rate & $10^{-3}$ \\
+LR schedule & Cosine annealing to $0$ over all iterations \\
+Gradient clipping & $\ell_2$ norm $\leq 1.0$ \\
+Training iterations & 10,000--20,000 (single-point); 20,000--30,000 (parametric) \\
+\midrule
+\multicolumn{2}{l}{\textit{Collocation sampling (per iteration)}} \\
+Interior collocation & 2,000 uniform + 500 near-strike (total 2,500) \\
+Boundary points & 400 (split OTM / ITM) \\
+Log-moneyness domain & $[\log K - 1.2,\;\log K + 1.2]$ \\
+Factor sampling & MC-empirical mean / std (Section~\ref{sec:mcsamp}) \\
+Tail coverage fraction & 20\% of $u$-points drawn at $2\times$ std \\
+\midrule
+\multicolumn{2}{l}{\textit{Loss weighting}} \\
+Adaptive scheme & Learnable log-variance (homoscedastic uncertainty) \\
+Terms balanced & PDE residual MSE, OTM boundary MSE, ITM boundary MSE \\
+\midrule
+\multicolumn{2}{l}{\textit{$\tau$-curriculum}} \\
+Initial horizon & $\tau_0 = 0.15\,T$ \\
+Ramp fraction & Linear growth to $T$ over first $50\%$ of iterations \\
+\midrule
+\multicolumn{2}{l}{\textit{Hardware}} \\
+Platform & CPU (single machine); code is GPU-compatible (\texttt{torch.device}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Hard-constrained initial-condition ansatz}
+\label{sec:ansatz}
+We train in time-to-maturity $\tau = T-t$ so the terminal condition becomes an
+initial condition at $\tau{=}0$.  Rather than penalise it softly, we enforce it
+exactly through the ansatz
+\begin{equation}
+  P(\tau,x,u) = P_{\mathrm{base}}(\tau,x) + \tau\,N_\theta(\tau,x,u),
+  \label{eq:ansatz}
+\end{equation}
+where $N_\theta$ is the network output.  The $\tau$ prefactor forces the
+learned correction to vanish at $\tau{=}0$ automatically, so the network never
+fights the initial condition.  Without this, a soft penalty for the terminal
+payoff oscillates against the PDE residual and prevents convergence.
+
+\subsection{Integrated-variance baseline anchor}
+\label{sec:baseline}
+The baseline $P_{\mathrm{base}}$ is a Black--Scholes call price.  A critical
+design choice is what volatility it is anchored at.  Anchoring at the
+\emph{spot} variance $V_0$ leaves a systematic level bias: the factors mean-revert
+from $V_0$ toward $\theta$ over the life of the option, so the model's actual
+expected variance is higher than $V_0$.  We anchor instead at the model's expected
+\emph{integrated} variance
+\begin{equation}
+  w(\tau) = \int_0^\tau \mathbb{E}[V_s]\,ds,
+  \label{eq:intvar}
+\end{equation}
+computed by a short pre-flight Monte Carlo (the same simulation used for factor
+collocation).  The baseline then uses $\sigma(\tau) = \sqrt{w(\tau)/\tau}$, which
+correctly captures the mean-reversion effect; the network learns only the residual
+stochastic-volatility correction.  This single change removed a uniform ${\sim}120$
+vol\bp{} level bias we observed with the $V_0$ anchor.
+
+\subsection{MC-informed factor collocation}
+\label{sec:mcsamp}
+The factor values $u$ at a given maturity $\tau$ are not centred at zero: they
+mean-revert to a distribution set by the model dynamics.  Sampling from a fixed
+symmetric box centred at zero causes the network to expend capacity on regions the
+dynamics never visit, and---critically---to under-cover the region governing the
+put-wing skew.  Before training we run a short lifted Monte Carlo simulation
+(1,000 paths, 50 time steps) to estimate the mean and standard deviation of each
+factor at the target maturity; training collocation is then drawn from
+$\mathcal{N}(\hat{\mu}_i, \hat{\sigma}_i)$.  An additional 20\% of collocation
+points are drawn at twice the estimated standard deviation to extend tail coverage.
+This change cut smile RMSE by roughly $45\%$ (from ${\sim}210$ to ${\sim}114$ vol\bp)
+relative to symmetric-box sampling.
+
+\subsection{Self-adaptive loss weighting}
+\label{sec:adaptive}
+Three loss terms must be balanced at each training step: the PDE-residual MSE
+$\mathcal{L}_{\mathrm{PDE}}$, and the MSEs at the deep-OTM ($P\to0$) and deep-ITM
+($P\to S - Ke^{-r\tau}$) boundaries.  Fixed-weight balancing is brittle: the
+ITM boundary target is $O(1)$ while the OTM target is $O(0)$, so a single lumped
+weight over-emphasises the ITM term.  We adopt the learnable
+homoscedastic-uncertainty scheme of \citet{kendall2018multitask} in the
+self-adaptive spirit of \citet{mcclenny2023self}: each term $\mathcal{L}_k$ is
+assigned a learnable log-variance $s_k$ and the objective is
+\begin{equation}
+  \mathcal{L} = \sum_{k\in\{\mathrm{PDE},\,\mathrm{OTM},\,\mathrm{ITM}\}}
+               \bigl[e^{-s_k}\,\mathcal{L}_k + s_k\bigr].
+  \label{eq:adaptive}
+\end{equation}
+The $s_k$ are optimised jointly with the network weights; large or noisy terms
+are down-weighted automatically.  We never hand-tune a boundary weight.
+
+\subsection{Causal \texorpdfstring{$\tau$}{tau}-curriculum}
+\label{sec:curriculum}
+PINNs that train simultaneously across all time-to-maturities can be pulled toward
+spurious solutions at long $\tau$ before the short-$\tau$ region has converged,
+because the residual at long $\tau$ depends causally on the short-$\tau$ solution
+\citep{wang2024respecting}.  We address this with a causal curriculum: training
+begins at $\tau_{\mathrm{max}} = 0.15\,T$ and linearly ramps to the full $T$ over
+the first half of training.  The short-$\tau$ solution is therefore established
+before the long-$\tau$ residual can perturb it.
+
+\subsection{Training algorithm}
+Algorithm~\ref{alg:train} summarises the full training procedure.
+
+\begin{algorithm}[t]
+\caption{PINN training for the lifted rough-Heston PDE}
+\label{alg:train}
+\begin{algorithmic}[1]
+\Require Model parameters $(V_0,\lambda,\theta,\nu,\rho)$; lift $(c_i,x_i)_{i=1}^n$;
+         maturity $T$; hyperparameters in Table~\ref{tab:arch}
+\State Initialise MLP $N_\theta$ (Xavier normal); learnable $s = [s_1,s_2,s_3] \leftarrow 0$
+\State \textbf{Pre-flight MC:} simulate lifted SDE, record $(\hat\mu_i, \hat\sigma_i)$
+       for each factor and term structure $w(\tau)$ \Comment{Sections~\ref{sec:mcsamp},~\ref{sec:baseline}}
+\For{iteration $t = 1, \ldots, N_{\mathrm{iter}}$}
+  \State $\tau_{\mathrm{max}} \leftarrow \min\!\bigl(T,\; 0.15T + \tfrac{0.85T \cdot t}{0.5\,N_{\mathrm{iter}}}\bigr)$
+         \Comment{$\tau$-curriculum, Sec.~\ref{sec:curriculum}}
+  \State Sample interior: $\{(\tau_j, x_j, u_j)\}$ from
+         $\mathrm{Unif}([0,\tau_{\mathrm{max}}])\times\mathrm{Unif}(x_{\mathrm{lo}},x_{\mathrm{hi}})
+         \times\mathcal{N}(\hat\mu,\hat\sigma)$
+  \State Sample boundary: $\{(\tau^{\mathrm{bc}}_j, x_{\mathrm{lo/hi}}, u^{\mathrm{bc}}_j)\}$
+  \State $\hat P \leftarrow P_{\mathrm{base}}(\tau,x;\,w) + \tau\,N_\theta(\tau,x,u)$
+         \Comment{Ansatz, Eq.~\eqref{eq:ansatz}}
+  \State $\mathcal{L}_{\mathrm{PDE}} \leftarrow$ mean-squared PDE residual of $\hat P$
+         (Eq.~\eqref{eq:pde})
+  \State $\mathcal{L}_{\mathrm{OTM}} \leftarrow \|\hat P(\tau^{\mathrm{bc}},x_{\mathrm{lo}},u^{\mathrm{bc}})\|^2$,\quad
+         $\mathcal{L}_{\mathrm{ITM}} \leftarrow \|\hat P(\tau^{\mathrm{bc}},x_{\mathrm{hi}},u^{\mathrm{bc}}) - (e^{x_{\mathrm{hi}}} - Ke^{-r\tau^{\mathrm{bc}}})\|^2$
+  \State $\mathcal{L} \leftarrow \sum_k [e^{-s_k}\mathcal{L}_k + s_k]$
+         \Comment{Adaptive weighting, Eq.~\eqref{eq:adaptive}}
+  \State Backpropagate $\mathcal{L}$; clip gradients ($\ell_2 \leq 1.0$); Adam step
+         on $(N_\theta, s)$; cosine LR anneal
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+% ================================================================
+\section{Evaluation methodology}
+\label{sec:eval}
+
+\subsection{Two independent ground truths}
+We hold the network to two references validated independently.
+
+\textbf{Fourier pricer.}  A semi-analytic pricer that solves the fractional Riccati
+equation for the rough Heston characteristic function
+\citep{eleuch2019characteristic} and inverts by Fourier integration
+\citep{carr1999option}.  It never uses the lift, so it is the ground truth of the
+\emph{true model} ($n\to\infty$); in the flat-volatility limit it reproduces
+Black--Scholes to $3.7\times10^{-7}$ in price.
+
+\textbf{Lifted Monte Carlo.}  An exponential-integrator Euler scheme that integrates
+the $n$-factor lifted SDE with the $-x_i U^i$ drift handled exactly:
+\begin{equation}
+  U^i_{t+\Delta t} = e^{-x_i\Delta t}\,U^i_t
+    + \int_t^{t+\Delta t}e^{-x_i(t+\Delta t - s)}\sqrt{V_s}\,dW^V_s.
+  \label{eq:expint}
+\end{equation}
+The exponential-integrator is essential: the mean reversions $(x_i)$ span roughly
+ten orders of magnitude for small $H$, and a naive Euler scheme diverges.  The
+lifted MC matches Black--Scholes within Monte Carlo error (1,000 paths, 50 steps)
+and agrees with the Fourier pricer for large $n$.  At finite $n$, the lifted MC is
+the \emph{exact solution of the PDE the network solves}; the Fourier pricer is the
+exact solution of the model.
+
+\subsection{Error decomposition}
+\label{sec:decomp}
+Rather than reporting a single ``PINN-versus-Fourier'' figure, we decompose the
+error per strike and in price space (where the signed contributions add exactly),
+\begin{equation}
+  \underbrace{(\mathrm{PINN}-\mathrm{Fourier})}_{\text{total}}
+  =\underbrace{(\mathrm{PINN}-\mathrm{MC})}_{\text{solve-error}}
+  +\underbrace{(\mathrm{MC}-\mathrm{Fourier})}_{\text{lift-error}}.
+  \label{eq:split}
+\end{equation}
+The \emph{solve-error} measures how accurately the network solves the PDE it was
+given; it is the quantity training controls.  The \emph{lift-error} is a model
+approximation that only increasing $n$ can reduce; it is not the network's
+responsibility.  Conflating the two gives a systematically pessimistic view of
+network accuracy and leads to wrong engineering decisions (e.g.\ adding more
+training iterations when the right action is to increase $n$).
+
+We report price RMSE in basis points of spot (px\bp; $1\,\mathrm{px\,bp} =
+10^{-4}\times S$) where \eqref{eq:split} is additive.  Implied-vol equivalents
+(vol\bp) are quoted where they aid interpretation.  Note that the two components
+carry opposite signs, so their RMSE values do not add.
+
+\subsection{Homogeneity re-scaling}
+We train the network at fixed strike $K{=}1$ and read off the smile $C(1,K)$
+through the call's degree-one homogeneity:
+\begin{equation}
+  C(1,K) = K\,C\!\left(1/K,\;1\right),
+  \label{eq:homog}
+\end{equation}
+which holds exactly because the variance dynamics are independent of the spot
+level.  Dropping this re-scaling and comparing mismatched options inflates the
+apparent error to ${\sim}2700$ vol\bp; we verified this is a comparison artefact,
+not a modelling failure.
+
+% ================================================================
+\section{Calibration procedures and data}
+\label{sec:calib}
+
+\subsection{Data}
+We use end-of-day BTC option quotes from Deribit, a cryptocurrency derivatives
+exchange and data provider, retrieved through its public API (no API key required).
+After filtering for positive bid--ask spreads and non-zero open interest, the
+surface covers 13 maturities and 97 points spanning a moneyness range of roughly
+$0.6$--$1.7$.  We set $r{=}0$ (standard for crypto, since there is no clean carry)
+and infer the forward from the put--call parity of liquid near-the-money quotes.
+Implied volatilities are computed from mid prices with a robust Newton--Raphson
+Black--Scholes inverter.  The calibration objective throughout is the
+vega-weighted implied-volatility RMSE.
+
+\subsection{Calibration methods}
+We compare three calibration routes head to head.
+\begin{enumerate}
+  \item \textbf{Fourier-in-the-loop.}  Differential evolution (60 generations,
+        all 5 parameters) with the Fourier pricer inside the objective, followed
+        by Nelder--Mead polish.  This is our from-scratch reference.
+  \item \textbf{PINN-only.}  Gradient descent on the model parameters using the
+        parametric network as a differentiable pricer, with zero Fourier calls.
+  \item \textbf{Hybrid.}  The parametric PINN's single-shot solution provides the
+        initial guess; a short Nelder--Mead Fourier polish then sharpens it.
+\end{enumerate}
+
+% ================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{The network scales where the grid cannot}
+\label{sec:nconv}
+Our headline experiment trains one architecture (width 64, depth 4) at
+$n{=}4,8,16,32$ on the canonical BTC calibration at $T{=}0.15$, over three
+independent seeds (Table~\ref{tab:nconv}, Figure~\ref{fig:nconv}).  The solve-error
+against the lifted MC grows only mildly: from $5.4\pm1.0$ to $10.7\pm2.0$ px\bp---a
+doubling over an eight-fold rise in dimension.  We resist calling it flat: an early
+single-seed run gave that impression, and three-seed statistics corrected us.  With
+three seeds the error bars at adjacent $n$ overlap, so the robust statement is the
+two-fold growth across the full range.  Wall-clock cost stays bounded throughout
+(6--10 minutes on CPU, per-iteration time essentially flat at 55--62\,ms) because
+the factor-Hessian computation is vectorised over the full double sum.
+
+Compare this against a finite-difference alternative.  A naive full-tensor grid on
+the same $(n{+}1)$-dimensional PDE at a modest 50 nodes per dimension needs
+$50^{n+1}$ points: $3.1\times10^{8}$ at $n{=}4$, $2.0\times10^{15}$ at $n{=}8$,
+and $1.2\times10^{56}$ at $n{=}32$.  Even $n{=}8$---roughly $16$ petabytes in double
+precision---is out of reach, while the network trains every $n$ on a laptop.
+Structured schemes (sparse grids, ADI, low-rank tensor-train) reach further but
+still degrade with $n$; none is standard or validated for this coupled
+$\rho$--$\nu$ PDE.  The conservative engineering verdict is that a competitive
+grid solve at $n{=}16$--$32$ is \emph{impractical}, not provably impossible.
+
+\begin{table}[t]
+\centering
+\caption{Dimension scaling: single-point PINN at $T{=}0.15$ on the canonical BTC
+calibration.  Solve-error is 3-seed mean\,$\pm$\,SD in price basis points of spot;
+lift-error and FD grid size are deterministic.}
+\label{tab:nconv}
+\begin{tabular}{r r r r r}
+\toprule
+$n$ & solve-error (px\bp) & lift-error (px\bp) & train time (s) & FD grid $50^{(n+1)}$\\
+\midrule
+4  & $5.4\pm1.0$  & $16.4$ & $397$ & $3.1\times10^{8}$  \\
+8  & $6.1\pm1.4$  & $7.9$  & $386$ & $2.0\times10^{15}$ \\
+16 & $8.8\pm1.6$  & $3.5$  & $591$ & $7.6\times10^{28}$ \\
+32 & $10.7\pm2.0$ & $1.7$  & $457$ & $1.2\times10^{56}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.82\linewidth]{fig1_n_convergence.png}
+\caption{Dimension scaling.  PINN solve-error (blue, 3-seed mean\,$\pm$\,SD)
+grows sub-linearly and stays under ${\sim}11$ px\bp{} to $n{=}32$, while the
+lift-error (red) falls monotonically and training time (green) stays bounded.
+The inset shows the naive finite-difference grid size $50^{n+1}$, which is
+infeasible by $n{=}8$.}
+\label{fig:nconv}
+\end{figure}
+
+\subsection{Error decomposition and a design rule for $n$}
+\label{sec:decomp_results}
+The decomposition \eqref{eq:split} overturned how we read our own results.  A
+single ``PINN vs Fourier'' implied-vol RMSE of $114$--$127$ vol\bp{} at $n{=}4$
+\emph{looks} like a network failure.  Split by \eqref{eq:split}, almost all of
+it is the lift: $37$ vol\bp{} of solve-error on top of $133$ of lift (they partly
+cancel to a total of $121$); with $\rho{=}0$ the solve-error is only $8$ vol\bp{}
+while the lift contributes the same $133$.  The network solves its PDE to well
+under $50$ vol\bp{}; what had appeared to be a modelling failure of the network
+was the finite-$n$ model catching up to reality.
+
+Because the lift-error shrinks monotonically with $n$ ($133, 63, 27, 12$ vol\bp{}
+at $n{=}4,8,16,32$) while the solve-error grows gently, the two curves cross.
+At $T{\approx}0.15$ the crossover falls near $n{=}8$--$10$
+(Figure~\ref{fig:nconv}), and this gives a concrete engineering design rule:
+\emph{below the crossover, add factors; above it, stop}.  The crossover shifts
+with maturity: the lift-error grows with $T$ (from $8.6$ to $31.8$ px\bp{} at
+$n{=}4$ as $T$ rises from $0.05$ to $0.5$), so longer-maturity pricing requires
+larger $n$.
+
+Robustness sweeps over $T\in\{0.05,0.15,0.5\}$ and $H\in\{0.05,0.10,0.15\}$
+confirm that the solve-error stays small and bounded everywhere ($1$--$9.5$ px\bp{}
+across all configurations), while the lift-error varies predictably.  The network
+does carry a mild directional bias at large $n$: at $n{=}32$ it systematically
+over-prices ATM and call strikes by roughly $+87$ to $+114$ vol\bp{} while the
+put wing is near zero; this bias grows with $n$ and is the main watch item for
+future high-$n$ deployments.
+
+\subsection{Bitcoin is genuinely rough}
+\label{sec:btc}
+Calibrated to the full Deribit BTC surface with a full-budget optimiser
+(differential evolution, 60 generations, all 13 maturities, 97 points, followed
+by Nelder--Mead polish), rough Heston returns
+\begin{equation*}
+  H{=}0.090,\quad \rho{=}{-}0.792,\quad V_0{=}0.103,\quad
+  \theta{=}0.253,\quad \lambda{=}2.567,\quad \nu{=}0.300,
+\end{equation*}
+at a vega-weighted implied-vol RMSE of 496 vol\bp{} (Figure~\ref{fig:calib}).
+The Hurst exponent is firmly rough and the correlation strongly negative---the
+signature of a crypto market with a steep, persistent left skew.  We do not dress
+up the fit quality: at 496 vol\bp{} it is coarse, and the per-maturity smiles in
+Figure~\ref{fig:calib}(b) show where the model strains.  That coarseness is a
+statement about the model's expressiveness on wide, richly curved crypto smiles,
+not about our solver; it is orthogonal to the solve-error studied above.
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.98\linewidth]{fig2_calibration_fit.png}
+\caption{Rough Heston calibrated to the Deribit BTC surface (97 points, 13
+maturities).  (a)~Market versus model implied volatility at all points (dashed:
+identity; colour: maturity).  (b)~Per-maturity smiles for four representative
+maturities: market (markers) versus model (dashed).  The residual spread reflects
+a model-expressiveness limitation on wide crypto smiles, not a solver artefact.}
+\label{fig:calib}
+\end{figure}
+
+\subsection{Parametric PINN and the warm-start hybrid}
+\label{sec:parametric}
+A single network cannot cover both the breadth of a parameter box and the accuracy
+of a point-trained model.  Table~\ref{tab:calib} and Figure~\ref{fig:hybrid}
+report the calibration experiment with three seeds.
+
+The parametric network adds $(H,\nu,\rho,\lambda,\theta)$ as five additional inputs,
+holding $V_0$ and the maturity fixed; we use $n{=}10$ (the crossover rule,
+Section~\ref{sec:decomp_results}) and width 96, depth 5.  At the box centre its
+solve-error is $11.0\pm4.7$ px\bp{} versus $5.9\pm1.2$ for a single-point network
+at the same $n$---roughly a two-fold penalty.  The penalty is uneven: it hovers near
+$9$--$11$ px\bp{} at typical parameter vectors but climbs to $47.7$ in the rough
+low-$H$ corner and $29.8$ at high $\nu$, where the PDE is stiffest.
+
+Used as a standalone calibrator the parametric PINN is fast (approximately $2$\,s,
+zero Fourier calls) but poor: $222\pm20$ vol\bp{} under the true model.  Two
+factors explain this.  First, the network fits its own imperfect prices, not the
+market.  Second, the single-slice BTC optimum prefers $\nu\approx0.87$ and
+$\theta\approx0.39$, which lie \emph{outside} the training box, so the network
+cannot reach the true minimum.  We would not recommend the standalone parametric
+PINN as a calibrator.
+
+Used as a warm start it is effective.  Seeding the Nelder--Mead Fourier polish
+with the PINN's parameter guess reaches $29.4\pm7.1$ vol\bp{}---on par with the
+from-scratch result on a 34--52\% smile---in only $237\pm46$ Fourier evaluations
+and ${\approx}23$\,s: roughly nine times fewer true-model calls and seven times
+faster than from scratch.  The value proposition is amortised: train once,
+then recalibrate cheaply, with the exact pricer kept in the loop for a brief,
+decisive finish.
+
+\begin{table}[t]
+\centering
+\caption{Calibration of the BTC $T{\approx}0.15$ slice, three methods, 3 PINN seeds.
+All fit-quality figures are judged by the true Fourier model over the same feasible
+region.}
+\label{tab:calib}
+\begin{tabular}{l c c c}
+\toprule
+Method & Fit RMSE (vol\bp) & Wall-clock (s) & Fourier evals \\
+\midrule
+Fourier-loop from scratch         & $23.7$        & $168$   & $2018$         \\
+PINN-only (single-shot)           & $222\pm20$    & $\sim2$ & $0$            \\
+Hybrid (PINN + Fourier polish)    & $29.4\pm7.1$  & $23$    & $237\pm46$     \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]\centering
+\includegraphics[width=0.82\linewidth]{fig3_hybrid.png}
+\caption{Hybrid calibration.  Fit quality (left) and Fourier-evaluation count
+(right) for the three methods.  The hybrid matches from-scratch quality at
+${\sim}9\times$ fewer Fourier evaluations; the PINN alone is fast but inaccurate.}
+\label{fig:hybrid}
+\end{figure}
+
+% ================================================================
+\section{Discussion}
+\label{sec:disc}
+
+\paragraph{What the scaling result does and does not say.}
+The finding we care about most is that the network's own error in solving the
+lifted PDE degrades only gently as the dimension grows, while grid methods become
+impractical.  We state it in its honest, weak form: the solve-error is not
+constant in $n$---a claim an early single-seed run seemed to support and three-seed
+statistics refuted---it grows sub-linearly, roughly doubling from $n{=}4$ to
+$n{=}32$.  And the grid comparison uses the naive $50^{n+1}$ count; sparse-grid,
+ADI, and tensor-train methods go further, so the defensible claim is
+\emph{impractical, not impossible}.  Even so, the contrast---sub-linear error and
+bounded wall-clock versus a grid that cannot be stored---is a concrete instance of
+the mesh-free advantage, and we believe it is the clearest such instance on an
+economically real, high-dimensional PDE.
+
+\paragraph{Four design choices are load-bearing.}
+We ablated each stabiliser explicitly.  Without the hard-constrained ansatz, the
+soft IC penalty oscillates against the residual and convergence stalls.  Without the
+integrated-variance anchor, a uniform $120$ vol\bp{} level bias remains.  Without
+MC-informed factor sampling, the smile flattens and RMSE roughly doubles.  Without
+self-adaptive weighting or the $\tau$-curriculum, seed variance is markedly higher
+(from $339\pm62$ to $310\pm28$ vol\bp{} in an early stability comparison).  Each
+of these design choices is transferable to other high-dimensional PDE-pricing
+problems.
+
+\paragraph{A lesson about validation methodology.}
+The error decomposition revealed something methodologically important.  When a
+surrogate replaces an exact solver, it is dangerously easy to validate it against
+the wrong reference.  Our network solves the finite-$n$ lifted PDE, whose exact
+solution is the lifted Monte Carlo, not the $n\to\infty$ model; comparing straight
+to the true model conflates solve-error with lift-error.  We found the two carry
+opposite signs and that the historical ``PINN-versus-Fourier'' gap was
+lift-dominated, not the network's failure.  \emph{Validate against a
+same-fidelity reference, report the two errors separately, and let their crossover
+set the approximation order}: none of this is special to rough volatility, and we
+urge it on anyone placing a learned solver on top of an approximated operator.
+
+\paragraph{Engineering trade-offs of the parametric PINN.}
+One network spread over five parameters is markedly less accurate than a
+point-trained one, worst in the rough, high-vol-of-vol corners, and calibrating
+with it alone is fast but unreliable.  Yet the same network is a fine warm start.
+The value proposition is amortised: the offline training cost is paid once, and
+each subsequent recalibration is roughly an order of magnitude cheaper.  A larger
+training budget would narrow the corner penalty.  The key limitation today is that
+the training box must contain the market optimum; box design therefore requires a
+prior characterisation of the market regime.
+
+\paragraph{Limitations and watch items.}
+Our evidence rests on a single market snapshot (one Deribit BTC surface), and the
+parametric and calibration studies fix the maturity to a single slice.  Timings
+are single-machine CPU figures at moderate budgets.  The mild directional
+solve-bias at large $n$ (ATM and call over-pricing growing to ${\sim}100$ vol\bp{}
+at $n{=}32$) is a watch item for high-$n$ deployments.  The sub-linear trend need
+not continue arbitrarily far.
+
+\paragraph{Future work.}
+The natural extensions are: (i)~add the maturity as a network input for whole-surface
+pricing; (ii)~scale width, depth, and GPU training to shrink the parametric corner
+penalty and probe larger $n$; (iii)~extend to other rough models (rough Bergomi)
+and to American and path-dependent payoffs; (iv)~investigate whether residual
+reweighting or a correction term resolves the high-$n$ directional bias;
+(v)~benchmark the mesh-free solver directly against structured finite differences
+at moderate $n$ where the latter still stand a chance.
+
+% ================================================================
+\section{Conclusion}
+\label{sec:conc}
+
+We have presented a physics-informed neural network for the $(n{+}1)$-dimensional
+Markovian-lifted rough-Heston pricing PDE, with a complete description of the
+architecture and four training stabilisers that are each necessary for stable
+convergence.  The network's solve-error grows only sub-linearly in the lifted
+dimension---staying below eleven price basis points to $n{=}32$ on the BTC
+calibration---while naive finite-difference grids become infeasible by $n{=}8$.
+Separating solve-error from lift-error is essential to read the numbers correctly
+and yields a concrete, maturity-dependent crossover rule for the factor count.
+Applied to live Bitcoin options the model is genuinely rough ($H{\approx}0.09$), and
+a parametric PINN, while not accurate enough to calibrate independently, is an
+effective warm start that recalibrates at roughly nine times fewer true-model
+evaluations.  The engineering message is that where grid methods succumb to
+dimension, a mesh-free PINN degrades gracefully; its greatest practical value is
+as a differentiable warm start for fast, high-quality recalibration.
+
+% ================================================================
+\section*{CRediT authorship contribution statement}
+
+\textbf{Aviral Sharma:} Conceptualisation, Methodology, Software, Validation,
+Formal analysis, Writing -- original draft, Writing -- review \& editing.
+\textbf{Kamal Preet Singh:} Writing -- review \& editing, Funding acquisition.
+\textbf{Vipul Sharma:} Writing -- review \& editing.
+
+\section*{Declaration of competing interests}
+
+The authors declare that they have no known competing financial interests or
+personal relationships that could have appeared to influence the work reported in
+this paper.
+
+\section*{Data availability}
+
+The BTC option data were retrieved from the Deribit public REST API
+(no API key required) at \texttt{https://www.deribit.com/api/v2}.  The raw data
+snapshot used in the experiments, the calibrated parameter file, and the complete
+PyTorch implementation are available at \todo{repository URL upon acceptance}.
+
+\section*{Declaration of generative AI and AI-assisted technologies in the
+writing process}
+
+During the preparation of this manuscript the authors used Claude (Anthropic)
+to assist with prose drafting and structural organisation.  After using this
+tool, the authors reviewed and edited all content as needed and take full
+responsibility for the accuracy and integrity of the published work.  The
+mathematical derivations, experimental results, code, and all scientific claims
+are the authors' own.
+
+\section*{Acknowledgements}
+
+This research received no specific grant from any funding agency in the public,
+commercial, or not-for-profit sectors.
+
+% ================================================================
+%% The .bbl file is pre-generated (eaai_v3.bbl) so the paper compiles in a
+%% single pdflatex pass without running BibTeX.
+\bibliographystyle{elsarticle-harv}
+\bibliography{refs}
+
+\end{document}

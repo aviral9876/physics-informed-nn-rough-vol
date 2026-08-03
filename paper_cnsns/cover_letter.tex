@@ -1,0 +1,76 @@
+\documentclass[12pt]{letter}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\signature{Aviral Sharma}
+\address{Chandigarh University \\ Chandigarh, India \\ aviral98765@gmail.com}
+
+\begin{document}
+
+\begin{letter}{Guest Editors \\ Special Issue: ``Artificial Intelligence Methods for Inverse Problems'' \\ Communications in Nonlinear Science and Numerical Simulation \\ Prof. Davide La Torre, Prof. Herb Kunze, Prof. Oleg Michailovich, Prof. Roman Smirnov}
+
+\opening{Dear Guest Editors,}
+
+We are pleased to submit our manuscript, \textit{``A Physics-Informed Neural
+Network Forward Solver for the Rough-Volatility Calibration Inverse Problem:
+Dimension Scaling on the Markovian-Lifted PDE and a Fast Warm-Start Hybrid,''}
+for consideration in the Special Issue on Artificial Intelligence Methods for
+Inverse Problems in \textit{Communications in Nonlinear Science and Numerical
+Simulation}.
+
+Our manuscript addresses an inverse problem that is difficult for a reason
+specific to this Special Issue's scope: the forward problem itself is
+ill-posed before any inversion is attempted. Rough-volatility models describe
+market variance with a fractional, non-Markovian kernel, so there is no
+finite-dimensional forward PDE to solve, and consequently no forward operator
+to embed in a calibration inverse problem at all. We resolve this using a
+Markovian lift -- approximating the fractional kernel by $n$ exponentials to
+recover a genuine but $(n{+}1)$-dimensional forward PDE -- and build the
+resulting forward operator from a physics-informed neural network (PINN).
+
+We believe the manuscript fits the Special Issue's call directly on several
+of its named criteria:
+
+\begin{itemize}
+\item \textbf{Convergence.} We quantify how the AI forward operator's own
+solve-error scales with the lifted dimension $n$ (the forward problem's
+governing nonlinear system), showing sub-linear growth out to $n=32$ where a
+naive finite-difference alternative is already infeasible by $n=8$.
+\item \textbf{Stability.} We identify four training design choices --
+a hard-constrained initial-condition ansatz, an integrated-variance baseline
+anchor, self-adaptive loss weighting, and a causal time-to-maturity curriculum
+-- that are each individually necessary for the forward operator to converge
+stably, and we report the ablation showing what fails without each one.
+\item \textbf{Generalisation and identifiability.} We extend the forward
+operator to take the five model parameters as additional inputs and use it
+inside the calibration inverse problem itself, explicitly reporting where its
+accuracy generalises and where it does not (the rough, high-vol-of-vol
+parameter corners), and diagnosing a training-box identifiability failure that
+limits it as a standalone inverse-problem solver.
+\item \textbf{Rigorous validation against a same-fidelity reference.} Rather
+than validating the AI method against the true (non-lifted) model directly, we
+decompose its error against an independent forward solver at the same lifted
+dimension, isolating the network's own error from the forward model's
+approximation error -- a validation methodology we believe is broadly relevant
+to AI methods for inverse problems built on approximated governing equations,
+not only to this application.
+\end{itemize}
+
+Practically, we show that the trained AI forward operator, used as a
+differentiable warm start for a short refinement against the true forward
+model, solves the calibration inverse problem for real Bitcoin option data
+(Deribit exchange) at approximately nine times fewer expensive forward-model
+evaluations than solving it from scratch, while a standalone AI-only solve is
+shown honestly to be insufficiently accurate on its own.
+
+This manuscript is original, has not been published previously, and is not
+under consideration elsewhere. All authors have approved the manuscript and
+agree with its submission to this Special Issue. We have no conflicts of
+interest to declare, and the study received no external funding.
+
+Thank you for considering our work. We look forward to your response.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}
