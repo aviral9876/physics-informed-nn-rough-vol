@@ -1,0 +1,27 @@
+{
+  "name": "environment",
+  "written_utc": "2026-09-05T17:38:20+00:00",
+  "git_sha": "9a1b46e",
+  "git_dirty": true,
+  "python": "3.12.10",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "argv": [
+    "env_report.py"
+  ],
+  "payload": {
+    "cpu_model": "13th Gen Intel(R) Core(TM) i5-13450HX",
+    "cpu_count_logical": 16,
+    "ram_gb": 15.7,
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10",
+    "torch": "2.12.1+cpu",
+    "torch_threads": 10,
+    "torch_interop_threads": 10,
+    "cuda_available": false,
+    "cuda_device": null,
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "blas": "scipy-openblas 0.3.33.112.0",
+    "float_precision": "float64 (PyTorch default overridden in pinn.py)"
+  }
+}

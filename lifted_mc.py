@@ -20,7 +20,12 @@ V_t^+ = max(V_t, 0) (full-truncation Euler, standard for Heston-type models).
 Note every factor shares the SAME Brownian increment dW; they differ only in
 mean-reversion x_i. This is the defining structure of the lift.
 
-Variance reduction: antithetic variates on the Brownian increments.
+Variance reduction: antithetic variates on the Brownian increments (always on),
+plus an optional terminal-forward control variate (control_variate=True).
+
+The reported standard error accounts for the antithetic PAIRING: the independent
+unit of replication is the pair mean, not the individual path. Using the plain
+i.i.d. formula here -- as this module did before -- mis-states the error.
 """
 
 import numpy as np
@@ -28,13 +33,21 @@ import numpy as np
 
 def price_european_mc(S0, K, T, r, params, lift,
                       n_paths=200_000, n_steps=300, seed=0,
-                      antithetic=True, option="call", return_stderr=True):
+                      antithetic=True, option="call", return_stderr=True,
+                      control_variate=False):
     """
     Monte Carlo price under the lifted rough Heston model.
 
     params : dict(V0, theta, lam, nu, rho)
     lift   : (c, x) from rough_heston_lift.lift_weights_geometric
+
+    control_variate : subtract the terminal-forward control Z = S_T - fwd
+        (E[Z] = 0 exactly) with the in-sample regression coefficient.
+        Unbiased, and OFF by default so committed results reproduce exactly.
+
     Returns (prices, stderr) if return_stderr else prices, aligned with K.
+    The stderr is the PAIRED estimator when antithetic=True -- see the note at
+    the accumulation loop.
     """
     c, x = lift
     n = c.shape[0]
@@ -99,14 +112,39 @@ def price_european_mc(S0, K, T, r, params, lift,
     disc = np.exp(-r * T)
     prices = np.empty(K.shape[0])
     stderrs = np.empty(K.shape[0])
+
+    # Control variate: E[S_T] = fwd exactly under the risk-neutral measure, so
+    # Z = ST - fwd has mean zero and can be subtracted off with the regression
+    # coefficient b* = Cov(payoff, Z)/Var(Z). Off by default so previously
+    # published numbers reproduce bit-for-bit; the MC-quality study turns it on.
+    if control_variate:
+        Z = ST - fwd
+        varZ = Z.var(ddof=1)
+
     for i, k in enumerate(K):
         if option == "call":
             payoff = np.maximum(ST - k, 0.0)
         else:
             payoff = np.maximum(k - ST, 0.0)
         disc_payoff = disc * payoff
+
+        if control_variate and varZ > 0.0:
+            b = np.cov(disc_payoff, Z, ddof=1)[0, 1] / varZ
+            disc_payoff = disc_payoff - b * Z
+
         prices[i] = disc_payoff.mean()
-        stderrs[i] = disc_payoff.std(ddof=1) / np.sqrt(n_paths)
+
+        # With antithetic sampling the 2*half samples are NOT i.i.d.: path j and
+        # path j+half are negatively coupled by construction. The i.i.d. formula
+        # std(all)/sqrt(n_paths) is therefore the wrong estimator -- it does not
+        # see the pairing at all, and mis-states the true error (it overstates
+        # where the coupling is negative, and can understate on the convex deep
+        # wings). The correct unit of independent replication is the PAIR MEAN.
+        if antithetic:
+            pair_means = 0.5 * (disc_payoff[:half] + disc_payoff[half:])
+            stderrs[i] = pair_means.std(ddof=1) / np.sqrt(half)
+        else:
+            stderrs[i] = disc_payoff.std(ddof=1) / np.sqrt(n_paths)
 
     prices = prices if prices.shape[0] > 1 else prices
     if return_stderr:

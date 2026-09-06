@@ -259,13 +259,34 @@ The variance is a Volterra process: non-Markovian, non-semimartingale, and
 admitting no finite-dimensional forward PDE. The parameter vector
 $(H,V_0,\theta,\lambda,\nu,\rho)$ is exactly what the calibration inverse problem
 must recover from market data; without a forward PDE there is no forward operator
-to embed inside that inverse problem at all.
+to embed inside that inverse problem at all. We fix this notation once, because
+the paper uses two different subsets of it: the full six-parameter vector is what
+the market calibration of Section~\ref{sec:btc} recovers, whereas the parametric
+forward operator of Section~\ref{sec:parametric} conditions on the five
+parameters $(H,\nu,\rho,\lambda,\theta)$ that enter the PDE coefficients, holding
+$V_0$ (a state, not a coefficient) and the maturity fixed at training time.
 
 The Markovian lift replaces $K$ with
 $K(t)\approx\sum_{i=1}^{n}c_i e^{-x_i t}$, introducing $n$
-Ornstein--Uhlenbeck factors $U^i$ with $dU^i_t = -x_i U^i_t\,dt + \sqrt{V_t}\,dW^V_t$
-and $V_t = V_0 + \sum_i c_i U^i_t$
-\citep{abijaber2019multifactor,abijaber2019lifting}. The weights $(c_i,x_i)$ are
+Ornstein--Uhlenbeck factors $U^i$,
+\begin{equation}
+  dU^i_t = \left[-x_i U^i_t + \lambda\left(\theta - V_t\right)\right]dt
+           + \nu\sqrt{V^+_t}\,dW^V_t,
+  \qquad U^i_0 = 0,
+  \qquad V_t = V_0 + \sum_{i=1}^{n} c_i U^i_t,
+  \label{eq:lift}
+\end{equation}
+where $V^+_t=\max(V_t,0)$
+\citep{abijaber2019multifactor,abijaber2019lifting}. Two features of
+\eqref{eq:lift} drive everything that follows. First, the factors differ
+\emph{only} in their mean-reversion speed $x_i$: they share the same drift
+source $\lambda(\theta-V_t)$, the same diffusion coefficient $\nu\sqrt{V^+_t}$
+and, critically, the same Brownian increment $dW^V_t$. That common driver is why
+the generator in \eqref{eq:pde} below carries a full $(i,j)$ double sum rather
+than a diagonal one; the derivation is given in \ref{app:derivation}. Second, the
+speeds $(x_i)$ span roughly ten orders of magnitude at small $H$, which is the
+source of the stiffness that dictates our numerical schemes
+(Section~\ref{sec:eval}). The weights $(c_i,x_i)$ are
 placed on a geometric quadrature grid \citep{abijaber2019multifactor}; the
 relative $L^2$ kernel error falls monotonically from $25.6\%$ at $n{=}5$ to
 $0.39\%$ at $n{=}100$, so raising $n$ genuinely buys forward-model fidelity, at

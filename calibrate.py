@@ -63,9 +63,12 @@ def _model_ivs(params_vec, surf, r):
 
 
 def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
-              verbose=True):
+              verbose=True, bounded_polish=False):
     """
     Calibrate rough Heston to the surface. Returns (params_dict, diagnostics).
+
+    bounded_polish : confine the Nelder-Mead polish to BOUNDS. False reproduces
+        the canonical calib_real.json, whose theta escaped the box (see below).
     """
     w = surf["weight"].values
     mkt = surf["iv"].values
@@ -91,13 +94,23 @@ def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
         polish=False, disp=verbose)
 
     best = result.x
+    best_loss = float(result.fun)
     if polish:
         if verbose:
             print("Local polish (Nelder-Mead)...")
+        # NOTE: historically this polish ran UNBOUNDED, and on the canonical BTC
+        # fit it walked theta to 0.2525 -- outside the (0.005, 0.20) box that the
+        # global search actually explored. The canonical calib_real.json was
+        # produced that way and is kept for continuity (the escape improves the
+        # fit, and theta ~ 0.25 is economically reasonable for crypto, where the
+        # long-run vol level is well above 45%). bounded_polish=True confines the
+        # polish to BOUNDS; the manuscript discloses which was used.
         loc = minimize(loss, best, method="Nelder-Mead",
+                       bounds=(BOUNDS if bounded_polish else None),
                        options=dict(maxiter=200, xatol=1e-4, fatol=1e-6))
-        if loc.fun < result.fun:
+        if loc.fun < best_loss:
             best = loc.x
+            best_loss = float(loc.fun)
 
     params = dict(zip(PARAM_NAMES, best))
     model = _model_ivs(best, surf, r)
@@ -106,7 +119,9 @@ def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
     diagnostics = dict(rmse_vol_bp=float(rmse_bp),
                        n_points=int(mask.sum()),
                        n_evals=n_eval["k"],
-                       final_loss=float(result.fun),
+                       final_loss=best_loss,
+                       de_loss=float(result.fun),
+                       bounded_polish=bool(bounded_polish),
                        model_iv=model, market_iv=mkt)
     if verbose:
         print(f"Done. Fit RMSE = {rmse_bp:.1f} vol bp over {mask.sum()} points.")
