@@ -421,7 +421,7 @@ mean-revert to a distribution set by the model dynamics. Sampling from a fixed
 symmetric box centred at zero causes the network to expend capacity on regions
 the dynamics never visit, and---critically---to under-cover the region governing
 the put-wing skew. Before training we run a short lifted Monte Carlo simulation
-(1,000 paths, 50 time steps) to estimate the mean and standard deviation of each
+(4,000 paths, 300 time steps) to estimate the mean and standard deviation of each
 factor at the target maturity; training collocation is then drawn from
 $\mathcal{N}(\hat{\mu}_i, \hat{\sigma}_i)$. An additional 20\% of collocation
 points are drawn at twice the estimated standard deviation to extend tail
@@ -514,11 +514,31 @@ integrates the $n$-factor lifted SDE with the $-x_i U^i$ drift handled exactly:
   \label{eq:expint}
 \end{equation}
 The exponential-integrator is essential: the mean reversions $(x_i)$ span roughly
-ten orders of magnitude for small $H$, and a naive Euler scheme diverges. The
-lifted MC matches Black--Scholes within Monte Carlo error (1,000 paths, 50 steps)
-and agrees with the Fourier forward model for large $n$. At finite $n$, the
-lifted MC is the \emph{exact solution of the forward PDE the network is asked to
-solve}; the Fourier forward model is the exact solution of the true model.
+ten orders of magnitude for small $H$, and a naive explicit Euler scheme applied
+to the factor equations diverges. The lifted MC matches Black--Scholes within
+Monte Carlo error in the flat-variance degeneracy ($\nu{=}\lambda{=}0$;
+100,000 paths, 200 steps) and agrees with the Fourier forward model for large
+$n$. At finite $n$, the lifted MC is the \emph{exact solution of the forward PDE
+the network is asked to solve}; the Fourier forward model is the exact solution
+of the true model.
+
+\paragraph{Precision of the reference.} Since every solve-error in this paper is
+measured against this simulator, its own error budget has to be smaller than the
+quantity being measured, and we state it explicitly rather than leave it
+implicit. All validation runs use $10^{6}$ antithetic paths and 400 time steps
+with a terminal-forward control variate. The resulting statistical standard
+error is $0.49$ px\bp{} at $n{=}4$ rising to $0.55$ px\bp{} at $n{=}32$, against
+solve-errors of $5$--$11$ px\bp{}: a signal-to-noise ratio above ten at every
+$n$. Two points deserve emphasis. First, the standard error must be computed on
+the antithetic \emph{pair means}, not on the individual paths; the naive
+independent-sample formula is not a valid estimator here and overstates the
+error by up to a factor of $3.3$ in the deep-in-the-money wing. Second, the
+time-discretisation bias --- which is a systematic error that no amount of
+sampling removes, and which is therefore the more dangerous of the two --- is
+bounded by a common-random-numbers refinement study at $0.07$, $0.17$, $0.41$
+and ${\lesssim}1.5$ px\bp{} for $n{=}4,8,16,32$ respectively. Both error sources
+are reported per strike in Section~\ref{sec:nconv} and, in full, in the
+replication package.
 
 \subsection{Error decomposition}
 \label{sec:decomp}
@@ -540,10 +560,27 @@ Conflating the two gives a systematically pessimistic view of the AI method and
 leads to the wrong engineering response inside a calibration pipeline---e.g.\
 training longer when the correct response is to raise $n$.
 
-We report price RMSE in basis points of spot (px\bp; $1\,\mathrm{px\,bp} =
-10^{-4}\times S$) where \eqref{eq:split} is additive. Implied-vol equivalents
-(vol\bp) are quoted where they aid interpretation. Note that the two components
-carry opposite signs, so their RMSE values do not add.
+\paragraph{Units, stated once.} Two units appear in this paper and a referee
+rightly asked us to connect them explicitly. Price errors are in basis points of
+spot (px\bp; $1\,\mathrm{px\,bp}=10^{-4}\times S$), and we use these wherever
+the decomposition \eqref{eq:split} is invoked, because it is additive in price
+and \emph{not} in implied volatility. Implied-volatility errors are in vol\bp{}
+($1\,\mathrm{vol\,bp}=10^{-4}$ in volatility), which is the unit a practitioner
+reads. The two are related by the Black--Scholes vega: at the money, $T{=}0.15$
+and $S{=}1$, vega is $0.154$ almost independently of the volatility level, so
+\[
+  100\,\mathrm{vol\bp} \;\approx\; 15.4\,\mathrm{px\bp}
+  \qquad\text{(at the money, }T{=}0.15\text{)}.
+\]
+The conversion is pointwise, not global: vega falls away in the wings, so an
+RMSE aggregated over the strike range $0.85$--$1.15$ converts at roughly
+$12$--$14$ px\bp{} per $100$ vol\bp{} rather than $15.4$. This is why, for
+instance, a lift-error of $16.4$ px\bp{} in Table~\ref{tab:nconv} corresponds to
+$133$ vol\bp{} in Section~\ref{sec:decomp_results} rather than to $106$. To keep
+the two readable side by side, \textbf{Table~\ref{tab:nconv} now reports both
+units for every entry}. Finally, note that the two components of
+\eqref{eq:split} carry opposite signs, so their RMSE values do not add even
+though the signed errors do.
 
 \subsection{Homogeneity re-scaling}
 We train the network at fixed strike $K{=}1$ and read off the smile $C(1,K)$
@@ -562,16 +599,91 @@ not a modelling failure of the forward operator.
 \label{sec:calib}
 
 \subsection{Data}
-We use end-of-day BTC option quotes from Deribit, a cryptocurrency derivatives
-exchange and data provider, retrieved through its public API (no API key
-required). After filtering for positive bid--ask spreads and non-zero open
-interest, the surface covers 13 maturities and 97 points spanning a moneyness
-range of roughly $0.6$--$1.7$. We set $r{=}0$ (standard for crypto, since there
-is no clean carry) and infer the forward from the put--call parity of liquid
-near-the-money quotes. Implied volatilities are computed from mid prices with a
-robust Newton--Raphson Black--Scholes inverter. The inverse-problem objective
-throughout is the vega-weighted implied-volatility RMSE between market quotes
-and the forward operator's output.
+\label{sec:data}
+We use a single BTC option-chain snapshot from Deribit, a cryptocurrency
+derivatives exchange, retrieved through its public API (no API key required) on
+\textbf{3 July 2026 at 05:57 UTC}, at a spot of \$62{,}191. The raw snapshot
+holds 912 quoted instruments across 13 expiries.
+
+Because the referees asked for the data handling to be stated precisely, we give
+the filter chain in full. From the raw chain we (i) take the mid price
+$\tfrac12(\text{bid}+\text{ask})$ where a two-sided quote exists and otherwise
+fall back to Deribit's \emph{mark} price; (ii) keep only the out-of-the-money
+leg at each strike (calls for $K\ge F$, puts for $K<F$), which is the more
+liquid and tighter-quoted side; (iii) drop $|k|>0.30$ with $k=\log(K/F)$;
+(iv) drop quotes below one currency unit, where the implied vol is dominated by
+tick noise; and (v) recompute the implied volatility from the mid by Brent
+inversion, dropping any point falling outside $[0.01,2.0]$. This leaves 286
+points, from which we retain at most eight per maturity, spread evenly in
+log-moneyness so that each smile constrains shape and not merely level. The
+fitted surface therefore comprises \textbf{104 points across 13 maturities}
+($T$ from $0.002$ to $0.98$ years) spanning a moneyness range
+$K/F\in[0.77,1.35]$; of these, 97 return a finite model implied volatility at
+the calibrated parameters and enter the reported RMSE.
+
+Two disclosures about that surface. First, \textbf{11 of the 104 fitted points
+carry no two-sided quote} and therefore enter through Deribit's mark price,
+which is an exchange model value rather than a tradable one. Second,
+\textbf{12 of the 104 had no traded volume} in the snapshot window. We do not
+filter on volume or open interest: Deribit's book-summary endpoint does not
+return open interest, and imposing a volume filter would remove most of the long
+maturities entirely. Section~\ref{sec:btc} reports the fit restricted to the
+liquid moneyness core as a robustness check, and
+Section~\ref{sec:arbitrage} reports static-arbitrage diagnostics on the surface
+that survives the filters above.
+
+We set $r{=}0$, the standard convention for crypto, where there is no clean
+carry, and take the forward to be $F=S\,e^{rT}=S$ with $S$ the underlying index
+price Deribit reports alongside each instrument. Implied volatilities are
+computed from mid prices with a robust Brent Black--Scholes inverter. The
+inverse-problem objective throughout is the vega-weighted implied-volatility
+RMSE between market quotes and the forward operator's output,
+\begin{equation}
+  \mathcal{L}(\Theta)=\sqrt{\frac{\sum_j w_j\left[\sigma^{\mathrm{mod}}_j(\Theta)
+        -\sigma^{\mathrm{mkt}}_j\right]^2}{\sum_j w_j}},
+  \qquad
+  w_j=\max\!\left(S\,\phi(d_{1,j})\sqrt{T_j},\;10^{-6}\right),
+  \label{eq:objective}
+\end{equation}
+with $\phi$ the standard normal density and $d_{1,j}$ evaluated at the market
+implied volatility, so the weights are fixed across the optimisation. Vega
+weighting lets well-determined near-the-money points dominate, which is standard
+practice. We flag one asymmetry for the reader: the \emph{objective} is
+vega-weighted as in \eqref{eq:objective}, whereas the headline fit quality we
+report in Section~\ref{sec:btc} is the \emph{unweighted} RMSE over the same
+points, which is the more conservative of the two.
+
+\subsection{Static-arbitrage diagnostics}
+\label{sec:arbitrage}
+Attributing a coarse fit to the forward model's expressiveness, as we do in
+Section~\ref{sec:btc}, is only legitimate if the target surface is itself
+arbitrage-consistent: quotes carrying butterfly or calendar violations cannot be
+fitted by \emph{any} arbitrage-free model, and the residual would then be the
+data's doing rather than rough Heston's. Crypto surfaces are wide and thinly
+quoted in the wings, so this is a real possibility and we test it rather than
+assume it.
+
+On undiscounted calls with $r{=}0$, putting the out-of-the-money puts on a
+common footing through parity, we check three conditions on the filtered
+surface: convexity in strike at each maturity (butterfly), the slope bound
+$-1\le \partial C/\partial K\le 0$ (vertical spread), and monotonicity of total
+implied variance $w(k,T)=\sigma^2 T$ in $T$ at fixed log-moneyness (calendar).
+The result is clean: \textbf{no violations} in 78 butterfly triples, 91 vertical
+pairs or 300 calendar comparisons. The margins are however slim --- the smallest
+butterfly margin is $0.28$ px\bp{} and the smallest calendar increment is
+$8.2\times10^{-5}$ in total-variance units --- so the surface is arbitrage-free
+but only barely, which is itself a fair description of a wide crypto smile. The
+calibrated model's own surface passes the same tests with larger margins
+($0.98$ px\bp{} butterfly), as an arbitrage-free model must.
+
+Separately, put--call parity holds on the raw chain: of 383 strikes quoted
+two-sided on both legs, \textbf{none} violates $C-P=F-K$ by more than the quoted
+bid--ask spread, though the residual RMS of $46$ px\bp{} (maximum $163$) is a
+reminder of how wide those spreads are.
+
+The conclusion we draw is narrow but useful: the $496$ vol\bp{} of
+Section~\ref{sec:btc} \emph{cannot} be blamed on static-arbitrage violations in
+the target, because there are none. It is a statement about the forward model.
 
 \subsection{Three routes to the inverse problem}
 We compare three ways of solving the same calibration inverse problem.
@@ -749,13 +861,14 @@ finish.
 slice, three methods, 3 PINN seeds. All fit-quality figures are judged by the
 true Fourier forward model over the same feasible region.}
 \label{tab:calib}
-\begin{tabular}{l c c c}
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.36\linewidth} c c c@{}}
 \toprule
 Method & Fit RMSE (vol\bp) & Wall-clock (s) & True-model evals \\
 \midrule
-True-forward-model loop, from scratch & $23.7$        & $168$   & $2018$         \\
-AI-only (single-shot)                 & $222\pm20$    & $\sim2$ & $0$            \\
-Hybrid (AI warm start + true-model polish) & $29.4\pm7.1$  & $23$    & $237\pm46$     \\
+True-forward-model loop, from scratch & $23.7$       & $168$      & $2018$     \\
+AI-only (single-shot)                 & $222\pm20$   & ${\sim}2$  & $0$        \\
+Hybrid (AI warm start, true-model polish) & $29.4\pm7.1$ & $23$   & $237\pm46$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -897,6 +1010,77 @@ tool, the authors reviewed and edited all content as needed and take full
 responsibility for the accuracy and integrity of the published work. The
 mathematical derivations, experimental results, code, and all scientific claims
 are the authors' own.
+
+% ================================================================
+\appendix
+
+\section{Derivation of the lifted pricing PDE}
+\label{app:derivation}
+
+We derive \eqref{eq:pde} from the lifted dynamics \eqref{eq:lift}, since a
+referee correctly observed that the correspondence is not self-evident --- in
+particular the presence of a \emph{full} $(i,j)$ double sum in the factor block,
+where a reader expecting independent Ornstein--Uhlenbeck factors would predict a
+diagonal one.
+
+Collect the state as $Z_t=(X_t,U^1_t,\ldots,U^n_t)$ with $X_t=\log S_t$. Under
+the risk-neutral measure the lifted system is
+\begin{align}
+  dX_t   &= \left(r-\tfrac12 V_t\right)dt + \sqrt{V^+_t}\,dB_t, \\
+  dU^i_t &= \left[-x_i U^i_t + \lambda(\theta-V_t)\right]dt
+            + \nu\sqrt{V^+_t}\,dW^V_t, \qquad i=1,\ldots,n,
+\end{align}
+with $V_t=V_0+\sum_i c_i U^i_t$ and $d\langle B,W^V\rangle_t=\rho\,dt$. This is
+a $(n{+}1)$-dimensional It\^o diffusion, hence Markovian --- which is the entire
+purpose of the lift, the original Volterra variance process being neither.
+
+The instantaneous covariation matrix of $Z$ follows from the fact that the
+system is driven by only \emph{two} Brownian motions, $B$ and $W^V$, whatever
+the value of $n$:
+\begin{equation}
+  \frac{d\langle X,X\rangle_t}{dt}=V^+_t,
+  \qquad
+  \frac{d\langle X,U^i\rangle_t}{dt}=\rho\nu V^+_t,
+  \qquad
+  \frac{d\langle U^i,U^j\rangle_t}{dt}=\nu^2 V^+_t
+  \quad\text{for \emph{all} }i,j.
+\end{equation}
+The last identity is the crux. Every factor is driven by the same increment
+$dW^V_t$ and differs only through its mean-reversion speed $x_i$, so the factor
+block of the covariation matrix is $\nu^2V^+_t\,\mathbf{1}\mathbf{1}^{\!\top}$
+--- rank one, with every entry equal, rather than diagonal. The factors are
+perfectly instantaneously correlated; they decorrelate only through their
+differing decay rates over finite time. Consequently the second-order factor
+term in the generator carries the unrestricted double sum
+$\sum_{i,j=1}^{n}P_{u_iu_j}$ that appears in \eqref{eq:pde}, and not
+$\sum_{i}P_{u_iu_i}$.
+
+The infinitesimal generator of $Z$ is therefore
+\begin{align}
+  \mathcal{A}P = {}& \left(r-\tfrac12 V\right)P_x
+      + \sum_{i=1}^{n}\left[-x_i u_i+\lambda(\theta-V)\right]P_{u_i}
+      \nonumber\\
+    & + \tfrac12 V P_{xx}
+      + \tfrac12\nu^2 V\sum_{i,j=1}^{n}P_{u_iu_j}
+      + \rho\nu V\sum_{i=1}^{n}P_{xu_i},
+\end{align}
+where we write $V$ for $V^+$ to lighten notation, the truncation being active
+only on a set the scheme controls numerically. For a European claim with payoff
+$g(X_T)$, the discounted price $P(t,x,u)=\mathbb{E}\!\left[e^{-r(T-t)}g(X_T)\mid
+Z_t=(x,u)\right]$ satisfies the Feynman--Kac equation
+$P_t+\mathcal{A}P-rP=0$ with $P(T,x,u)=g(x)$, which on substituting
+$\mathcal{A}$ and $g(x)=\max(e^{x}-K,0)$ is exactly \eqref{eq:pde}.
+
+Three remarks bear on the numerics. First, the drift source
+$\lambda(\theta-V)$ and the diffusion coefficient $\nu\sqrt{V}$ are
+\emph{shared} across factors; only $-x_iu_i$ distinguishes them, which is why
+the factors can be advanced with a single common Brownian draw. Second, the
+$(x_i)$ span roughly ten orders of magnitude at small $H$, making the factor
+block stiff and forcing the exponential-integrator treatment of
+Section~\ref{sec:eval}. Third, the rank-one structure of the factor covariation
+is what couples $\rho$ and $\nu$ across the whole factor block, and is the
+reason the low-rank tensor structure that a tensor-train solver would need is
+eroded rather than preserved as $n$ grows.
 
 % ================================================================
 \bibliographystyle{elsarticle-num}

@@ -1,0 +1,126 @@
+{
+  "name": "arbitrage",
+  "written_utc": "2026-09-06T04:04:42+00:00",
+  "git_sha": "6bdd289",
+  "git_dirty": true,
+  "python": "3.12.10",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "argv": [
+    "arbitrage.py"
+  ],
+  "payload": {
+    "data_quality": {
+      "n_raw_instruments": 912,
+      "n_fitted": 104,
+      "n_two_sided": 93,
+      "n_mark_fallback": 11,
+      "n_zero_volume": 12,
+      "open_interest_available": false,
+      "moneyness_min": 0.7697883723466357,
+      "moneyness_max": 1.3471728715726004,
+      "n_maturities": 13
+    },
+    "market": {
+      "butterfly": {
+        "n_tested": 78,
+        "n_violations": 0,
+        "worst_px_bp": 0.28139999984214925,
+        "violations": []
+      },
+      "vertical": {
+        "n_tested": 91,
+        "n_violations": 0,
+        "max_slope": -0.0012580243043822407,
+        "min_slope_plus_one": 0.0005821152022011944,
+        "violations": []
+      },
+      "calendar": {
+        "n_tested": 300,
+        "n_violations": 0,
+        "worst_dw": 8.154966802813887e-05,
+        "violations": []
+      }
+    },
+    "model": {
+      "butterfly": {
+        "n_tested": 71,
+        "n_violations": 0,
+        "worst_px_bp": 0.9761646404733568,
+        "violations": []
+      },
+      "vertical": {
+        "n_tested": 84,
+        "n_violations": 0,
+        "max_slope": -0.00044346605804860835,
+        "min_slope_plus_one": 2.926969433125759e-05,
+        "violations": []
+      },
+      "calendar": {
+        "n_tested": 300,
+        "n_violations": 0,
+        "worst_dw": 0.00015798425874802692,
+        "violations": []
+      }
+    },
+    "parity_raw": {
+      "n_pairs": 383,
+      "n_outside_spread": 0,
+      "rms_resid_px_bp": 46.37428081080823,
+      "max_abs_resid_px_bp": 162.49171194467772
+    },
+    "liquid_core": {
+      "n_points": 53,
+      "n_maturities": 13,
+      "butterfly": {
+        "n_tested": 27,
+        "n_violations": 0,
+        "worst_px_bp": 0.5878666713353546,
+        "violations": []
+      },
+      "vertical": {
+        "n_tested": 40,
+        "n_violations": 0,
+        "max_slope": -0.003559717988276077,
+        "min_slope_plus_one": 0.0035675788421891674,
+        "violations": []
+      },
+      "calendar": {
+        "n_tested": 300,
+        "n_violations": 0,
+        "worst_dw": 9.125830153216598e-05,
+        "violations": []
+      }
+    },
+    "calibrated_params": {
+      "H": 0.08986471921353176,
+      "V0": 0.10347744703885647,
+      "theta": 0.252522966988623,
+      "lam": 2.5666934818916634,
+      "nu": 0.2997684379403064,
+      "rho": -0.7919808469999094,
+      "r": 0.0,
+      "calib_rmse_vol_bp": 496.4253312936949,
+      "n_points": 97,
+      "n_maturities": 13,
+      "max_points_per_maturity": 8,
+      "de_maxiter": 60,
+      "de_popsize": 12,
+      "spot": 62059.19,
+      "maturities": [
+        0.002059,
+        0.004799,
+        0.007539,
+        0.010278,
+        0.018498,
+        0.037676,
+        0.056854,
+        0.076032,
+        0.152744,
+        0.229457,
+        0.478772,
+        0.728087,
+        0.977402
+      ]
+    }
+  }
+}
