@@ -23,6 +23,14 @@
 \journal{Communications in Nonlinear Science and Numerical Simulation}
 
 %% ---------------------------------------------------------------
+%% revision tables are included only when make_tables.py has written them
+\newif\ifrevtable
+%% LaTeX's \input wrapper breaks booktabs rules when used inside a tabular;
+%% the primitive does not.
+\makeatletter
+\newcommand{\revrows}[1]{\@@input tables/#1.tex }
+\makeatother
+
 \begin{document}
 
 \begin{frontmatter}
@@ -683,6 +691,29 @@ reminder of how wide those spreads are.
 The conclusion we draw is narrow but useful: the $496$ vol\bp{} of
 Section~\ref{sec:btc} \emph{cannot} be blamed on static-arbitrage violations in
 the target, because there are none. It is a statement about the forward model.
+\IfFileExists{tables/liquid.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+
+\paragraph{The liquid core.}
+The sharper form of the referee's question is whether the coarse fit is driven by the wings.
+Table~\ref{tab:liquid} refits on the liquid core, $|k|\le0.10$ and $|k|\le0.20$, from both
+ends of the $H$ ridge of Section~\ref{sec:roughness_robustness}, and also evaluates the two
+unrefitted full-surface vectors on the same core points, which separates the effect of
+dropping the wings from the effect of re-optimising.
+%% LIQUID: interpret once results/liquid_core.json lands.
+\begin{table}[t]
+\centering
+\caption{Liquid-core refit. Fit quality in vol\bp, weighted by the vega weights of the objective and unweighted. Unrefitted rows evaluate the full-surface vectors on the restricted points.}
+\label{tab:liquid}
+\footnotesize
+\begin{tabular}{@{}l r l r r r r r@{}}
+\toprule
+Window & pts & Fit & weighted & unweighted & $H$ & $\rho$ & $\nu$ \\
+\midrule
+\revrows{liquid}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
 
 \subsection{Three routes to the inverse problem}
 We compare three ways of solving the same calibration inverse problem.
@@ -796,6 +827,63 @@ $50^{n+1}$, which is infeasible by $n{=}8$.}
 \label{fig:nconv}
 \end{figure}
 
+\IfFileExists{tables/hparams_grid.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\subsection{Sensitivity to architecture and collocation, and where the growth lives}
+\label{sec:hparams}
+Two questions follow from Table~\ref{tab:nconv}. Is the width-64 / depth-4 choice a
+knife-edge? And is the mild growth of solve-error with $n$ a property of the lifted PDE or of
+the optimiser? Table~\ref{tab:hpgrid} answers the first with a $3\times3$ architecture grid
+at $n{=}4$. For the second we use the a-priori structure of PINN error estimates
+\citep{mishra2023estimates,deryck2024error}: the solve-error is bounded by a stability
+constant of the PDE times the residual, so we score every trained network on a fixed,
+seeded, never-trained-on set of $20\,000$ collocation points and follow that held-out
+residual across $n$ (Table~\ref{tab:hpnsweep}). If the residual is flat while the
+solve-error grows, the growth sits in the stability constant $C(n)$; if the residual grows
+with it, the cause is optimisation or quadrature, and Table~\ref{tab:hpcolloc} tests the
+quadrature half directly by raising the collocation count at $n{=}32$, where the paper holds
+$n_{\mathrm{col}}$ at $2000$ while the dimension is $33$.
+%% HPARAMS: interpret once results/hparams.json lands.
+\begin{table}[t]
+\centering
+\caption{Architecture grid at $n{=}4$, two seeds, $10^4$ iterations. Solve-error in px\bp{} against the 1M-path lifted MC; held-out PDE residual (RMS); minutes per run on CPU.}
+\label{tab:hpgrid}
+\small
+\begin{tabular}{@{}r r r r r r@{}}
+\toprule
+width & depth & params & solve-error & residual & min \\
+\midrule
+\revrows{hparams_grid}
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[t]
+\centering
+\caption{Held-out PDE residual across $n$ (width 64, depth 4, $n_{\mathrm{col}}{=}2000$, two seeds), with the solve-error and both quantities relative to $n{=}4$.}
+\label{tab:hpnsweep}
+\small
+\begin{tabular}{@{}r r r r r@{}}
+\toprule
+$n$ & solve-error & residual & solve/solve$_4$ & resid./resid.$_4$ \\
+\midrule
+\revrows{hparams_nsweep}
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[t]
+\centering
+\caption{Collocation ablation at $n{=}32$ (width 64, depth 4, two seeds).}
+\label{tab:hpcolloc}
+\small
+\begin{tabular}{@{}r r r r@{}}
+\toprule
+$n_{\mathrm{col}}$ & solve-error & residual & min \\
+\midrule
+\revrows{hparams_colloc}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
+
 \subsection{Error decomposition and a design rule for $n$}
 \label{sec:decomp_results}
 The decomposition \eqref{eq:split} overturned how we read our own results. A
@@ -825,6 +913,32 @@ systematically over-prices ATM and call strikes by roughly $+87$ to $+114$
 vol\bp{} while the put wing is near zero; this bias grows with $n$ and is a
 watch item for anyone deploying this forward operator at high $n$ inside a
 calibration loop.
+\IfFileExists{tables/n32bias.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+
+\paragraph{The $n{=}32$ bias, taken apart.}
+Factor-tail coverage is symmetric by construction---the sampler widens both signs of the
+factor deviation and the asymmetric option is off by default---so asymmetry is not the
+mechanism. Two others are separable by ablation: a noisy forward-variance anchor (the
+baseline is anchored on a pre-flight Monte Carlo of $4\,000$ paths, and a level error in
+the anchor is a level error in the price, which is what an ATM/call bias looks like), and
+under-coverage of the factor tails in 32 dimensions. Table~\ref{tab:n32} re-estimates the
+anchor with $200\,000$ paths and widens the tails, separately and together, against the
+same 1M-path reference; the reference's own Euler bias at 400 steps is shown alongside.
+%% N32: interpret once results/n32_bias.json lands.
+\begin{table}[t]
+\centering
+\caption{Ablation of the $n{=}32$ directional bias, three seeds. Solve-error in px\bp; signed implied-vol error by strike bucket in vol\bp{} (network minus lifted MC).}
+\label{tab:n32}
+\footnotesize
+\begin{tabular}{@{}l r r r r@{}}
+\toprule
+Configuration & solve-error & puts & ATM & calls \\
+\midrule
+\revrows{n32bias}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
 
 \subsection{Solving the inverse problem: Bitcoin is genuinely rough}
 \label{sec:btc}
@@ -897,6 +1011,44 @@ for every PINN experiment, because it is the stiffer and therefore harder case
 for the solver (Section~\ref{sec:problem}); and we lean on the estimate
 below, which never passes through this inverse problem at all.
 
+\IfFileExists{tables/profile.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{table}[t]
+\centering
+\caption{Profile likelihood in $H$ on the headline surface. $H$ is fixed at each grid value and the other five parameters are re-optimised by Nelder--Mead from both ends of the ridge, keeping the better. Weighted and unweighted implied-vol RMSE in vol\bp; the last three columns show how $\nu$, $\rho$ and $\lambda$ compensate along the ridge.}
+\label{tab:profile}
+\small
+\begin{tabular}{@{}r r r r r r@{}}
+\toprule
+$H$ & weighted & unweighted & $\nu$ & $\rho$ & $\lambda$ \\
+\midrule
+\revrows{profile}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
+\IfFileExists{tables/risk.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\paragraph{What the ridge costs in risk terms.}
+Non-identification of $H$ matters only if the quantities a desk actually uses depend on where
+along the ridge one sits. Table~\ref{tab:risk} prices three of them with the exact forward
+model at three months, for every parameter vector the surface cannot tell apart: the
+variance-swap fair strike (from the log-contract replication), the 25-delta risk reversal,
+and a 90/110 collar.
+%% RISK: interpret once results/risk_functionals.json carries the ridge vectors.
+\begin{table}[t]
+\centering
+\caption{Risk functionals along the calibration ridge, Fourier-priced at $T{=}0.25$, $S_0{=}1$, $r{=}0$. Variance swap as $\sqrt{K_{\mathrm{var}}}$ in annualised vol points; risk reversal as IV(25$\Delta$ call)$-$IV(25$\Delta$ put) in vol points; collar as long 90\% put, short 110\% call, in price basis points of spot.}
+\label{tab:risk}
+\small
+\begin{tabular}{@{}l l r r r@{}}
+\toprule
+Vector & & Var.\ swap & $25\Delta$ RR & Collar \\
+\midrule
+\revrows{risk}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
+
 \paragraph{An estimate that does not use the option surface.}
 Following Gatheral, Jaisson and Rosenbaum~\citep{gatheral2018volatility}, we estimate $H$ directly from realised
 volatility. From five-minute log returns of the Deribit BTC perpetual we build
@@ -939,6 +1091,31 @@ a difference of $+0.002$ against a combined bootstrap standard error of $0.025$
 approval. One caveat belongs with these numbers: this estimator is biased low on
 short windows, so the two one-year windows are comparable with each other but not
 with the full-sample figure above, and we compare only the former.
+\IfFileExists{tables/regime.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+
+\paragraph{Option-implied, across the same split.}
+The same event study can be run on option surfaces, with the caveat of
+Section~\ref{sec:data}: the historical panel is trade-based where the headline snapshot is
+quote-based. From it we build 52 pre-ETF (calendar 2023) and 47 post-ETF (February--December
+2024) weekly surfaces. Because a single surface does not pin $H$, each week is fitted by
+Nelder--Mead from both ends of the ridge, never from the previous week, and
+Table~\ref{tab:regime} compares three things across the split: $H$ within each basin, the
+identified parameters $\rho$ and $\nu$, and which basin the week prefers.
+%% REGIME: interpret once results/regime_hurst.json lands.
+\begin{table}[t]
+\centering
+\caption{Option-implied parameters before and after the spot-ETF approval, 52 and 47 weekly surfaces. Mean\,$\pm$\,SD per regime; difference pre$-$post with a 4-week block-bootstrap 95\% interval and Welch $p$.}
+\label{tab:regime}
+\footnotesize
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+Quantity & pre-ETF & post-ETF & diff. & 95\% CI & $p$ \\
+\midrule
+\revrows{regime}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
 
 \subsection{A parametric AI forward operator inside the inverse problem}
 \label{sec:parametric}
@@ -1003,6 +1180,38 @@ matches from-scratch quality at ${\sim}9\times$ fewer true-model evaluations;
 the AI-only route is fast but inaccurate.}
 \label{fig:hybrid}
 \end{figure}
+
+\IfFileExists{tables/surrogate.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\subsection{Against the forward operators practitioners use}
+\label{sec:operators}
+A reader who wants a fast forward operator for rough Heston would not reach for a PINN first.
+They would price with the Fourier transform directly, or run a short lifted Monte Carlo, or
+generate labels with an exact pricer and fit a network to them in the manner of
+Bayer et al.~\citep{bayer2019deep} and Horvath et al.~\citep{horvath2021deep}---the method class of the calibration
+networks of Liu et al.~\citep{liu2019cann}. Table~\ref{tab:operators} places our operator next to all
+three under one protocol. The supervised surrogate is built to match the parametric network
+exactly: the same five inputs, the same fixed 21-point log-moneyness grid at $T{=}0.15$, the
+same widened box, Sobol-sampled and split by parameter vector so that no strike of a test
+vector is ever seen in training.
+%% OPERATORS: interpret once results/surrogate.json lands; do not hide the loss.
+\begin{table}[t]
+\centering
+\caption{Forward operators for the lifted rough-Heston smile at $T{=}0.15$. Error against Fourier is not comparable across rows: the surrogate is trained on Fourier labels, the PINNs are measured against an independent lifted Monte Carlo at the same $n$ and inherit the lift-error against Fourier on top.}
+\label{tab:operators}
+\footnotesize
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X l c c c c c@{}}
+\toprule
+Operator & Offline cost & Exact pricer offline? & vs Fourier (vol\bp) & vs lifted MC & Solve/lift split & Differentiable \\
+\midrule
+Fourier (fractional Riccati) & none & is the pricer & $0$ & -- & -- & no \\
+Lifted MC, $8\,000$ antithetic paths & none & no & lift-error (Table~\ref{tab:nconv}) & $\approx$ own SE & reference & no \\
+Single-point PINN, $n{=}4$ & 8--10 min per vector & no & $121$ & $37$ & yes & yes \\
+Parametric PINN, $n{=}10$ & 20--31 min once & no & solve $+$ lift & $11.0$ px\bp{} at centre & yes & yes \\
+\revrows{surrogate}
+\bottomrule
+\end{tabularx}
+\end{table}
+\fi
 
 % ================================================================
 \section{Discussion}

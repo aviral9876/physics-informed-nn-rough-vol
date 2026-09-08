@@ -233,10 +233,15 @@ def table_surrogate():
     """Rows for the forward-operator comparison: the supervised surrogate. (R1.4)"""
     d = _load("surrogate")
     s = d["summary"]
-    rows = [r"Supervised surrogate (MLP $5\to4\times30\to21$) & %.0f min & %.0f s & yes & "
-            r"$%.1f\pm%.1f$ & $%.1f\pm%.1f$ & no" % (
+    # columns: Operator & Offline cost & Exact pricer offline? & vs Fourier & vs lifted MC
+    #          & Solve/lift split & Differentiable   (see tab:operators in the manuscript)
+    rows = [r"Supervised surrogate (MLP $5\to4\times30\to21$) & %.0f min labels $+$ %.0f s "
+            r"training & yes & $%.1f\pm%.1f$ & -- & no & yes" % (
                 d["label_seconds"] / 60, s["train_seconds_mean"], s["test_rmse_mean"],
-                s["test_rmse_sd"], s["corner_rmse_mean"], s["corner_rmse_sd"]) + EOL]
+                s["test_rmse_sd"]) + EOL,
+            r"\multicolumn{7}{@{}l}{\quad in the rough / high-$\nu$ corner: "
+            r"$%.1f\pm%.1f$ vol\,bp on %d test vectors.}" % (
+                s["corner_rmse_mean"], s["corner_rmse_sd"], d["runs"][0]["n_corner"]) + EOL]
     _write("surrogate", rows, "results/surrogate.json (%d labelled vectors), git %s"
            % (d["n_labelled"], _sha("surrogate")))
 
