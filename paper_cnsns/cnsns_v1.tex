@@ -728,7 +728,20 @@ Table~\ref{tab:liquid} refits on the liquid core, $|k|\le0.10$ and $|k|\le0.20$,
 ends of the $H$ ridge of Section~\ref{sec:roughness_robustness}, and also evaluates the two
 unrefitted full-surface vectors on the same core points, which separates the effect of
 dropping the wings from the effect of re-optimising.
-%% LIQUID: interpret once results/liquid_core.json lands.
+Two things follow from Table~\ref{tab:liquid}. First, the wings account for a
+part of the residual but not for its character: restricting to $|k|\le0.10$
+improves the weighted objective from $174$ to $157$ vol\bp{} and the unweighted
+RMSE from $496$ to $411$, and on $|k|\le0.20$ to $154$--$157$ and $426$. A fit
+that remains above $400$ vol\bp{} on the fifty-three most liquid points is a
+statement about the lifted rough-Heston form on these smiles, not about
+illiquid quotes. Second, the two ends of the $H$ ridge of
+Section~\ref{sec:roughness_robustness} change places as the window narrows.
+On the full surface the smoother end ($H\approx0.25$) fits better by $11$
+vol\bp{} weighted; on $|k|\le0.20$ by $3$; on $|k|\le0.10$ the rough end
+($H\approx0.09$) wins by $9$, while the unweighted RMSE stays within $2$
+vol\bp{} of a tie at every window. $H$ is thus a wing-sensitive parameter on
+this surface, and its non-identification is not a wing artefact either: it
+holds at every window.
 \begin{table}[!htbp]
 \centering
 \caption{Liquid-core refit. Fit quality in vol\bp, weighted by the vega weights of the objective and unweighted. Unrefitted rows evaluate the full-surface vectors on the restricted points.}

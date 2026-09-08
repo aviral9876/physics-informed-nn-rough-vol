@@ -194,10 +194,11 @@ def table_liquid():
     d = _load("liquid_core")
     rows = []
     for label, w in d["windows"].items():
+        tex = r"$|k|\le%.2f$" % float(label.split("<=")[1]) if label.startswith("|k|<=") else label
         for name, u in w["unrefitted"].items():
             rows.append(r"%s & %d & %s, no refit & $%.1f$ & $%.1f$ & -- & -- & --" % (
-                label.replace("|", r"$|").replace("<=", r"\le") + ("$" if "|" in label else ""),
-                w["n_points"], name, u["weighted_vol_bp"], u["unweighted_vol_bp"]) + EOL)
+                tex, w["n_points"], name, u["weighted_vol_bp"], u["unweighted_vol_bp"]) + EOL)
+            tex = ""                                     # print the window once
         for name, f in w["refitted"].items():
             p = f["params"]
             rows.append(r" & & refit from %s & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
