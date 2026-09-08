@@ -25,6 +25,13 @@
 %% ---------------------------------------------------------------
 %% revision tables are included only when make_tables.py has written them
 \newif\ifrevtable
+%% keep floats near their text instead of deferring them to the end
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.6}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{5}
 %% LaTeX's \input wrapper breaks booktabs rules when used inside a tabular;
 %% the primitive does not.
 \makeatletter
@@ -206,7 +213,7 @@ inverse-problem solution, and the warm-start hybrid.
 \section{Related work}
 \label{sec:related}
 
-\paragraph{Closest prior work.}
+\paragraph{Closest prior work}
 Papapantoleon and Rou~\citep{papapantoleon2025timestepping} price European options in rough-diffusion
 models by recasting the forward pricing PDE as an energy-minimisation problem and
 approximating it in a time-stepping deep gradient flow, demonstrated on the
@@ -215,13 +222,13 @@ differs in mechanism (time-stepping variational scheme versus residual PINN) and
 does not study forward-operator dimension scaling, error decomposition, or the
 calibration inverse problem downstream.
 
-\paragraph{Neural forward operators for rough volatility.}
+\paragraph{Neural forward operators for rough volatility}
 Jacquier and \v{Z}uri\v{c}~\citep{jacquier2023random} cast the path-dependent pricing equations as backward
 SDEs and solve them with a random-feature network, reducing training to a
 least-squares regression. They share the forward target but not the mechanism,
 and neither dimension scaling nor the inverse problem is studied.
 
-\paragraph{AI methods for the calibration inverse problem.}
+\paragraph{AI methods for the calibration inverse problem}
 The dominant approach for fast rough-volatility calibration is the supervised
 surrogate of Bayer et al.~\citep{bayer2019deep} and Horvath et al.~\citep{horvath2021deep}: a network trained
 offline on precomputed prices or implied volatilities, used as a fast forward map
@@ -231,7 +238,7 @@ from a physics-informed forward solve---cannot be decomposed into a network-erro
 and a model-error term the way ours can, which is precisely the diagnostic an
 inverse-problem user needs to trust or distrust a calibrated fit.
 
-\paragraph{PINN training pathologies and remedies.}
+\paragraph{PINN training pathologies and remedies}
 PINNs are well-known to fail as forward operators when loss terms sit on
 different scales or temporal causality is violated
 \citep{krishnapriyan2021characterizing,wang2022when}. The two stabilisers we use
@@ -240,7 +247,7 @@ homoscedastic-uncertainty weights \citep{kendall2018multitask,mcclenny2023self}
 and a causal $\tau$-curriculum \citep{wang2024respecting}---directly address
 these failure modes.
 
-\paragraph{Foundational methods.}
+\paragraph{Foundational methods}
 We build on PINNs \citep{raissi2019physics} and deep PDE solvers
 \citep{sirignano2018dgm,han2018solving}; on rough volatility
 \citep{gatheral2018volatility,eleuch2019characteristic} and its multifactor
@@ -340,7 +347,7 @@ operator used inside the inverse problem (Section~\ref{sec:parametric}) we
 increase to $W{=}96$, $D{=}5$. Table~\ref{tab:arch} summarises all architectural
 and training hyperparameters.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Architecture and training hyperparameters of the PINN forward operator.
 Values in parentheses are for the parametric extension (Section~\ref{sec:parametric}).}
@@ -530,7 +537,7 @@ $n$. At finite $n$, the lifted MC is the \emph{exact solution of the forward PDE
 the network is asked to solve}; the Fourier forward model is the exact solution
 of the true model.
 
-\paragraph{Precision of the reference.} Since every solve-error in this paper is
+\paragraph{Precision of the reference} Since every solve-error in this paper is
 measured against this simulator, its own error budget has to be smaller than the
 quantity being measured, and we state it explicitly rather than leave it
 implicit. All validation runs use $10^{6}$ antithetic paths and 400 time steps
@@ -567,7 +574,7 @@ network's responsibility, and no amount of network re-training removes it.
 Conflating the two gives a systematically pessimistic view of the AI method and
 leads to the wrong engineering response inside a calibration pipeline---e.g.\ training longer when the correct response is to raise $n$.
 
-\paragraph{Units, stated once.} Two units appear in this paper and a referee
+\paragraph{Units, stated once} Two units appear in this paper and a referee
 rightly asked us to connect them explicitly. Price errors are in basis points of
 spot (px\bp; $1\,\mathrm{px\,bp}=10^{-4}\times S$), and we use these wherever
 the decomposition \eqref{eq:split} is invoked, because it is additive in price
@@ -693,14 +700,14 @@ Section~\ref{sec:btc} \emph{cannot} be blamed on static-arbitrage violations in
 the target, because there are none. It is a statement about the forward model.
 \IfFileExists{tables/liquid.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 
-\paragraph{The liquid core.}
+\paragraph{The liquid core}
 The sharper form of the referee's question is whether the coarse fit is driven by the wings.
 Table~\ref{tab:liquid} refits on the liquid core, $|k|\le0.10$ and $|k|\le0.20$, from both
 ends of the $H$ ridge of Section~\ref{sec:roughness_robustness}, and also evaluates the two
 unrefitted full-surface vectors on the same core points, which separates the effect of
 dropping the wings from the effect of re-optimising.
 %% LIQUID: interpret once results/liquid_core.json lands.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Liquid-core refit. Fit quality in vol\bp, weighted by the vega weights of the objective and unweighted. Unrefitted rows evaluate the full-surface vectors on the restricted points.}
 \label{tab:liquid}
@@ -730,7 +737,7 @@ We compare three ways of solving the same calibration inverse problem.
         model then sharpens it.
 \end{enumerate}
 
-\paragraph{Optimiser settings, stated once.}\label{par:optimiser}
+\paragraph{Optimiser settings, stated once}\label{par:optimiser}
 Two distinct budgets appear in this paper and conflating them would misstate the
 speed-up, so we separate them explicitly. The \emph{full-budget market
 calibration} of Section~\ref{sec:btc} uses SciPy's \texttt{differential\_evolution}
@@ -797,7 +804,7 @@ $n{=}16$--$32$ is \emph{impractical} as the engine of a calibration loop, not
 provably impossible. Establishing the stronger claim would require building and
 tuning such a solver, which is a research programme in its own right.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Dimension scaling of the forward operator: single-point PINN at
 $T{=}0.15$ on the canonical BTC calibration. Solve-error is 3-seed
@@ -817,7 +824,7 @@ $n$ & solve-error (px\bp) & lift-error (px\bp) & train time (s) & FD grid $50^{(
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]\centering
+\begin{figure}[!htbp]\centering
 \includegraphics[width=0.82\linewidth]{fig1_n_convergence.png}
 \caption{Dimension scaling of the forward operator. PINN solve-error (blue,
 3-seed mean\,$\pm$\,SD) grows sub-linearly and stays under ${\sim}11$ px\bp{} to
@@ -843,7 +850,7 @@ with it, the cause is optimisation or quadrature, and Table~\ref{tab:hpcolloc} t
 quadrature half directly by raising the collocation count at $n{=}32$, where the paper holds
 $n_{\mathrm{col}}$ at $2000$ while the dimension is $33$.
 %% HPARAMS: interpret once results/hparams.json lands.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Architecture grid at $n{=}4$, two seeds, $10^4$ iterations. Solve-error in px\bp{} against the 1M-path lifted MC; held-out PDE residual (RMS); minutes per run on CPU.}
 \label{tab:hpgrid}
@@ -856,7 +863,7 @@ width & depth & params & solve-error & residual & min \\
 \bottomrule
 \end{tabular}
 \end{table}
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Held-out PDE residual across $n$ (width 64, depth 4, $n_{\mathrm{col}}{=}2000$, two seeds), with the solve-error and both quantities relative to $n{=}4$.}
 \label{tab:hpnsweep}
@@ -869,7 +876,7 @@ $n$ & solve-error & residual & solve/solve$_4$ & resid./resid.$_4$ \\
 \bottomrule
 \end{tabular}
 \end{table}
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Collocation ablation at $n{=}32$ (width 64, depth 4, two seeds).}
 \label{tab:hpcolloc}
@@ -925,7 +932,7 @@ under-coverage of the factor tails in 32 dimensions. Table~\ref{tab:n32} re-esti
 anchor with $200\,000$ paths and widens the tails, separately and together, against the
 same 1M-path reference; the reference's own Euler bias at 400 steps is shown alongside.
 %% N32: interpret once results/n32_bias.json lands.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Ablation of the $n{=}32$ directional bias, three seeds. Solve-error in px\bp; signed implied-vol error by strike bucket in vol\bp{} (network minus lifted MC).}
 \label{tab:n32}
@@ -963,7 +970,7 @@ That coarseness is a statement about the forward model's expressiveness on wide,
 richly curved crypto smiles, not about the AI forward operator; it is orthogonal
 to the solve-error studied above.
 
-\begin{figure}[t]\centering
+\begin{figure}[!htbp]\centering
 \includegraphics[width=0.98\linewidth]{fig2_calibration_fit.png}
 \caption{Rough Heston calibrated to the Deribit BTC surface (97 points, 13
 maturities), solving the inverse problem with the true Fourier forward model.
@@ -985,7 +992,7 @@ single snapshot says nothing about whether the roughness is a stable feature of
 the market or an artefact of one day's regime. We test both, the second using an
 estimator that never touches an option price.
 
-\paragraph{Does the surface identify $H$?}
+\paragraph{Whether the surface identifies $H$}
 Not sharply. Two experiments say so. First, while sizing the regime study we
 ran the calibration on the headline snapshot with the light optimiser budget of
 the paragraph on optimiser settings in Section~\ref{sec:calib} (10 generations, population 8): it returned
@@ -1012,7 +1019,7 @@ for the solver (Section~\ref{sec:problem}); and we lean on the estimate
 below, which never passes through this inverse problem at all.
 
 \IfFileExists{tables/profile.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Profile likelihood in $H$ on the headline surface. $H$ is fixed at each grid value and the other five parameters are re-optimised by Nelder--Mead from both ends of the ridge, keeping the better. Weighted and unweighted implied-vol RMSE in vol\bp; the last three columns show how $\nu$, $\rho$ and $\lambda$ compensate along the ridge.}
 \label{tab:profile}
@@ -1027,14 +1034,14 @@ $H$ & weighted & unweighted & $\nu$ & $\rho$ & $\lambda$ \\
 \end{table}
 \fi
 \IfFileExists{tables/risk.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
-\paragraph{What the ridge costs in risk terms.}
+\paragraph{What the ridge costs in risk terms}
 Non-identification of $H$ matters only if the quantities a desk actually uses depend on where
 along the ridge one sits. Table~\ref{tab:risk} prices three of them with the exact forward
 model at three months, for every parameter vector the surface cannot tell apart: the
 variance-swap fair strike (from the log-contract replication), the 25-delta risk reversal,
 and a 90/110 collar.
 %% RISK: interpret once results/risk_functionals.json carries the ridge vectors.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Risk functionals along the calibration ridge, Fourier-priced at $T{=}0.25$, $S_0{=}1$, $r{=}0$. Variance swap as $\sqrt{K_{\mathrm{var}}}$ in annualised vol points; risk reversal as IV(25$\Delta$ call)$-$IV(25$\Delta$ put) in vol points; collar as long 90\% put, short 110\% call, in price basis points of spot.}
 \label{tab:risk}
@@ -1049,7 +1056,7 @@ Vector & & Var.\ swap & $25\Delta$ RR & Collar \\
 \end{table}
 \fi
 
-\paragraph{An estimate that does not use the option surface.}
+\paragraph{An estimate that does not use the option surface}
 Following Gatheral, Jaisson and Rosenbaum~\citep{gatheral2018volatility}, we estimate $H$ directly from realised
 volatility. From five-minute log returns of the Deribit BTC perpetual we build
 daily realised variance, set $\sigma_t=\sqrt{RV_t}$, and form the $q$-th absolute
@@ -1076,7 +1083,7 @@ roughly an order of magnitude too small---it returns $2\times10^{-4}$ for a
 window whose neighbouring window sits $0.02$ away. Any inference drawn from it
 would be spurious.
 
-\paragraph{Stability across the spot-ETF approval.}
+\paragraph{Stability across the spot-ETF approval}
 The referee's regime question has a natural event: the approval of US spot
 Bitcoin ETFs on 11 January 2024. We split the realised-volatility series into
 calendar 2023 (pre) and February--December 2024 (post), excluding January 2024
@@ -1093,7 +1100,7 @@ short windows, so the two one-year windows are comparable with each other but no
 with the full-sample figure above, and we compare only the former.
 \IfFileExists{tables/regime.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 
-\paragraph{Option-implied, across the same split.}
+\paragraph{Option-implied, across the same split}
 The same event study can be run on option surfaces, with the caveat of
 Section~\ref{sec:data}: the historical panel is trade-based where the headline snapshot is
 quote-based. From it we build 52 pre-ETF (calendar 2023) and 47 post-ETF (February--December
@@ -1102,7 +1109,7 @@ Nelder--Mead from both ends of the ridge, never from the previous week, and
 Table~\ref{tab:regime} compares three things across the split: $H$ within each basin, the
 identified parameters $\rho$ and $\nu$, and which basin the week prefers.
 %% REGIME: interpret once results/regime_hurst.json lands.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Option-implied parameters before and after the spot-ETF approval, 52 and 47 weekly surfaces. Mean\,$\pm$\,SD per regime; difference pre$-$post with a 4-week block-bootstrap 95\% interval and Welch $p$.}
 \label{tab:regime}
@@ -1154,7 +1161,7 @@ forward operator once, then solve each new instance of the inverse problem
 cheaply, with the exact forward model kept in the loop for a brief, decisive
 finish.
 
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Solving the calibration inverse problem for the BTC $T{\approx}0.15$
 slice, three methods, 3 PINN seeds. All fit-quality figures are judged by the
@@ -1172,7 +1179,7 @@ Hybrid (AI warm start, true-model polish) & $29.4\pm7.1$ & $23$   & $237\pm46$ \
 \end{tabularx}
 \end{table}
 
-\begin{figure}[t]\centering
+\begin{figure}[!htbp]\centering
 \includegraphics[width=0.82\linewidth]{fig3_hybrid.png}
 \caption{Hybrid solution of the inverse problem. Fit quality (left) and
 true-forward-model evaluation count (right) for the three methods. The hybrid
@@ -1194,7 +1201,7 @@ exactly: the same five inputs, the same fixed 21-point log-moneyness grid at $T{
 same widened box, Sobol-sampled and split by parameter vector so that no strike of a test
 vector is ever seen in training.
 %% OPERATORS: interpret once results/surrogate.json lands; do not hide the loss.
-\begin{table}[t]
+\begin{table}[!htbp]
 \centering
 \caption{Forward operators for the lifted rough-Heston smile at $T{=}0.15$. Error against Fourier is not comparable across rows: the surrogate is trained on Fourier labels, the PINNs are measured against an independent lifted Monte Carlo at the same $n$ and inherit the lift-error against Fourier on top.}
 \label{tab:operators}
@@ -1217,7 +1224,7 @@ Parametric PINN, $n{=}10$ & 20--31 min once & no & solve $+$ lift & $11.0$ px\bp
 \section{Discussion}
 \label{sec:disc}
 
-\paragraph{Convergence of the AI forward operator.}
+\paragraph{Convergence of the AI forward operator}
 The finding we care about most is that the network's own error in solving the
 lifted forward PDE degrades only gently as the dimension grows, while grid
 methods become impractical as an inverse-problem engine. We state it in its
@@ -1231,7 +1238,7 @@ be stored---is a concrete instance of the mesh-free advantage as a component of
 an inverse-problem pipeline, and we believe it is among the clearest such
 instances on an economically real, high-dimensional forward PDE.
 
-\paragraph{Stability: four design choices are load-bearing.}
+\paragraph{Stability: four design choices are load-bearing}
 We ablated each stabiliser explicitly. Without the hard-constrained ansatz, the
 soft IC penalty oscillates against the residual and the forward operator fails
 to converge. Without the integrated-variance anchor, a uniform $120$ vol\bp{}
@@ -1242,7 +1249,7 @@ is markedly higher (from $339\pm62$ to $310\pm28$ vol\bp{} in an early stability
 comparison). Each of these choices carries over to other AI forward
 operators for high-dimensional inverse problems.
 
-\paragraph{A lesson about validating AI forward operators.}
+\paragraph{A lesson about validating AI forward operators}
 The error decomposition revealed something methodologically important. When a
 learned surrogate replaces an exact forward solver inside an inverse problem, it
 is dangerously easy to validate it against the wrong reference. Our network
@@ -1256,7 +1263,7 @@ crossover set the approximation order}: none of this is special to rough
 volatility, and we urge it on anyone placing a learned forward operator inside
 an inverse problem built on an approximated governing equation.
 
-\paragraph{Generalisation and identifiability inside the inverse problem.}
+\paragraph{Generalisation and identifiability inside the inverse problem}
 A single network spread over five parameters is markedly less accurate than a
 point-trained one, worst in the rough, high-vol-of-vol corners where the PDE is
 stiffest---an explicit, quantified generalisation limit rather than an averaged
@@ -1269,7 +1276,7 @@ model; it is a limitation of trusting the AI forward operator unsupervised. The
 warm-start hybrid sidesteps exactly this failure mode by keeping the true
 forward model as the final arbiter.
 
-\paragraph{Limitations and watch items.}
+\paragraph{Limitations and watch items}
 Our evidence rests on a single market snapshot (one Deribit BTC surface), and
 the parametric and calibration studies fix the maturity to a single slice.
 Timings are single-machine CPU figures at moderate budgets. The mild directional
@@ -1277,7 +1284,7 @@ solve-bias at large $n$ (ATM and call over-pricing growing to ${\sim}100$
 vol\bp{} at $n{=}32$) is a watch item for high-$n$ deployments inside a
 calibration loop. The sub-linear trend need not continue arbitrarily far.
 
-\paragraph{Future work.}
+\paragraph{Future work}
 Natural extensions include: (i)~adding the maturity as a network input so a
 single forward operator serves the whole surface's inverse problem at once;
 (ii)~scaling width, depth, and GPU training to shrink the parametric corner
