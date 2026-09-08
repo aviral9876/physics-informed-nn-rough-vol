@@ -108,22 +108,137 @@ def table_arbitrage():
 
 
 def table_regime():
-    """Table: Hurst exponent by market regime, pre- and post-ETF. (R1.5)"""
+    """Table: option-implied parameters by market regime, pre- and post-ETF. (R1.5)
+
+    One row per comparison from diagnose_regime_hurst.py: H from each warm start,
+    rho and nu (the parameters the surface does identify), the fit itself, and
+    which end of the H ridge each regime prefers.
+    """
     d = _load("regime_hurst")
     s = d["summary"]
-    rows = [r"Pre-ETF (2023) & %d & $%.4f$ & $%.4f$ & $%.4f$" % (
-                s["pre"]["n"], s["pre"]["H_mean"], s["pre"]["H_sd"],
-                s["pre"]["H_median"]) + EOL,
-            r"Post-ETF (2024) & %d & $%.4f$ & $%.4f$ & $%.4f$" % (
-                s["post"]["n"], s["post"]["H_mean"], s["post"]["H_sd"],
-                s["post"]["H_median"]) + EOL,
-            r"\midrule",
-            r"\multicolumn{5}{@{}l}{Difference $%+.4f$; Welch $p=%.3f$; "
-            r"Mann--Whitney $p=%.3f$;}" % (
-                s["diff"], s["welch_p"], s["mannwhitney_p"]) + EOL,
-            r"\multicolumn{5}{@{}l}{4-week block-bootstrap 95\%% CI "
-            r"$[%+.4f, %+.4f]$.}" % tuple(s["boot_ci95"]) + EOL]
+    labels = [("H_canonical", r"$H$, canonical start"), ("H_wide", r"$H$, wide-box start"),
+              ("rho_canonical", r"$\rho$"), ("nu_canonical", r"$\nu$"),
+              ("fit_canonical", r"weighted fit (vol\,bp)"),
+              ("basin", r"loss(wide) $-$ loss(canonical) (vol\,bp)")]
+    rows = []
+    for key, lab in labels:
+        c = s.get(key)
+        if not c:
+            continue
+        rows.append(r"%s & $%.3f\pm%.3f$ & $%.3f\pm%.3f$ & $%+.3f$ & $[%+.3f, %+.3f]$ & %.3f" % (
+            lab, c["pre_mean"], c["pre_sd"], c["post_mean"], c["post_sd"], c["diff"],
+            c["boot_ci95"][0], c["boot_ci95"][1], c["welch_p"]) + EOL)
+    if not rows:
+        raise KeyError("summary")
+    b = s.get("basin")
+    if b:
+        rows.append(r"\midrule")
+        rows.append(r"\multicolumn{6}{@{}l}{Weeks preferring the smoother-$H$ basin: "
+                    r"%.0f\%% pre, %.0f\%% post; $n=%d$ and $%d$ weeks.}" % (
+                        100 * b["frac_prefer_wide_pre"], 100 * b["frac_prefer_wide_post"],
+                        b["n_pre"], b["n_post"]) + EOL)
     _write("regime", rows, "results/regime_hurst.json, git " + _sha("regime_hurst"))
+
+
+def table_profile():
+    """Table: profile likelihood in H -- the ridge. (M11)"""
+    d = _load("calib_uncertainty")
+    c = d["canonical"]
+    rows = []
+    for p in d["profile_H"]:
+        q = p["params"]
+        rows.append(r"$%.3f$ & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
+            p["fixed"], 1e4 * p["weighted"], p["unweighted_vol_bp"],
+            q["nu"], q["rho"], q["lam"]) + EOL)
+    rows.append(r"\midrule")
+    rows.append(r"\multicolumn{6}{@{}l}{Canonical fit: $H=%.3f$, weighted %.1f, unweighted %.1f vol\,bp; "
+                r"5\%% interval $H\in[%.3f, %.3f]$.}" % (
+                    c["params"]["H"], c["weighted_vol_bp"], c["unweighted_vol_bp"],
+                    d["interval_H"][0], d["interval_H"][1]) + EOL)
+    _write("profile", rows, "results/calib_uncertainty.json, git " + _sha("calib_uncertainty"))
+
+
+def table_risk():
+    """Table: risk functionals for every vector the surface cannot tell apart. (R1.8)"""
+    d = _load("risk_functionals")
+    rows = []
+    for r_ in d["rows"]:
+        rows.append(r"%s & %s & $%.2f$ & $%+.2f$ & $%+.1f$" % (
+            r_["source"], r_["tag"].replace("%", r"\%"), 100 * r_["varswap_vol"],
+            100 * r_["rr25_vol"], r_["collar_px_bp"]) + EOL)
+    s = d["summary"]
+    if s["varswap_vol"]["ridge"]:
+        rows.append(r"\midrule")
+        rows.append(r"\multicolumn{5}{@{}l}{Range along the ridge (%d vectors): variance swap %.2f, "
+                    r"risk reversal %.2f vol pts; collar %.1f px\,bp.}" % (
+                        s["varswap_vol"]["ridge"]["n"], 100 * s["varswap_vol"]["ridge"]["range"],
+                        100 * s["rr25_vol"]["ridge"]["range"], s["collar_px_bp"]["ridge"]["range"]) + EOL)
+    _write("risk", rows, "results/risk_functionals.json, git " + _sha("risk_functionals"))
+
+
+def table_liquid():
+    """Table: liquid-core refit. (R1.6)"""
+    d = _load("liquid_core")
+    rows = []
+    for label, w in d["windows"].items():
+        for name, u in w["unrefitted"].items():
+            rows.append(r"%s & %d & %s, no refit & $%.1f$ & $%.1f$ & -- & -- & --" % (
+                label.replace("|", r"$|").replace("<=", r"\le") + ("$" if "|" in label else ""),
+                w["n_points"], name, u["weighted_vol_bp"], u["unweighted_vol_bp"]) + EOL)
+        for name, f in w["refitted"].items():
+            p = f["params"]
+            rows.append(r" & & refit from %s & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
+                name, f["weighted_vol_bp"], f["unweighted_vol_bp"], p["H"], p["rho"], p["nu"]) + EOL)
+    _write("liquid", rows, "results/liquid_core.json, git " + _sha("liquid_core"))
+
+
+def table_hparams():
+    """Tables T-new5: architecture grid at n=4, and residual persistence across n. (M9, R1.3)"""
+    d = _load("hparams")
+    rows = [r"%d & %d & %d & $%.1f\pm%.1f$ & $%.2e$ & %.1f" % (
+                q["width"], q["depth"], q["n_params"], q["solve_mean"], q["solve_sd"],
+                q["residual_mean"], q["train_seconds"] / 60) + EOL
+            for q in d["grid"]]
+    _write("hparams_grid", rows, "results/hparams.json, git " + _sha("hparams"))
+    s4, r4 = d["n_sweep"][0]["solve_mean"], d["n_sweep"][0]["residual_mean"]
+    rows = [r"%d & $%.1f\pm%.1f$ & $%.2e$ & %.2f & %.2f" % (
+                q["n"], q["solve_mean"], q["solve_sd"], q["residual_mean"],
+                q["solve_mean"] / s4, q["residual_mean"] / r4) + EOL
+            for q in d["n_sweep"]]
+    _write("hparams_nsweep", rows, "results/hparams.json, git " + _sha("hparams"))
+    rows = [r"%d & $%.1f\pm%.1f$ & $%.2e$ & %.1f" % (
+                q["n_col"], q["solve_mean"], q["solve_sd"], q["residual_mean"],
+                q["train_seconds"] / 60) + EOL
+            for q in d["collocation"]]
+    _write("hparams_colloc", rows, "results/hparams.json, git " + _sha("hparams"))
+
+
+def table_n32():
+    """Table: n=32 bias ablation. (R1.7)"""
+    d = _load("n32_bias")
+    rows = []
+    for name, c in d["configs"].items():
+        sw = c["signed_solve_iv_bp"]
+        rows.append(r"%s & $%.1f\pm%.1f$ & $%+.0f$ & $%+.0f$ & $%+.0f$" % (
+            name, c["solve_mean"], c["solve_std"], sw["OTMputs"], sw["ATM"], sw["OTMcalls"]) + EOL)
+    e = d.get("euler_bias_row")
+    if e:
+        rows.append(r"\midrule")
+        rows.append(r"\multicolumn{5}{@{}l}{Reference Euler bias at 400 steps: $%.2f$ px\,bp "
+                    r"(finer grids price lower).}" % e["euler_bias_400_px_bp"] + EOL)
+    _write("n32bias", rows, "results/n32_bias.json, git " + _sha("n32_bias"))
+
+
+def table_surrogate():
+    """Rows for the forward-operator comparison: the supervised surrogate. (R1.4)"""
+    d = _load("surrogate")
+    s = d["summary"]
+    rows = [r"Supervised surrogate (MLP $5\to4\times30\to21$) & %.0f min & %.0f s & yes & "
+            r"$%.1f\pm%.1f$ & $%.1f\pm%.1f$ & no" % (
+                d["label_seconds"] / 60, s["train_seconds_mean"], s["test_rmse_mean"],
+                s["test_rmse_sd"], s["corner_rmse_mean"], s["corner_rmse_sd"]) + EOL]
+    _write("surrogate", rows, "results/surrogate.json (%d labelled vectors), git %s"
+           % (d["n_labelled"], _sha("surrogate")))
 
 
 def table_environment():
@@ -137,7 +252,8 @@ def table_environment():
 
 
 EMITTERS = [table_nconv, table_mcquality, table_arbitrage,
-            table_regime, table_environment]
+            table_regime, table_profile, table_risk, table_liquid,
+            table_hparams, table_n32, table_surrogate, table_environment]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
