@@ -646,6 +646,28 @@ liquid moneyness core as a robustness check, and
 Section~\ref{sec:arbitrage} reports static-arbitrage diagnostics on the surface
 that survives the filters above.
 
+\paragraph{Two further datasets, used only for robustness}
+The regime and roughness checks of Section~\ref{sec:roughness_robustness} use
+two datasets distinct from the headline snapshot, and we describe both here so
+that their caveats sit with the data rather than with the results. (i) A
+five-minute bar history of the Deribit BTC perpetual, August 2018 to August
+2026 ($841$k bars), collected by the authors through the same public API. It
+enters only the realised-volatility estimate of $H$ and never touches an
+option. (ii) A daily implied-volatility panel of BTC options, December 2016 to
+August 2026, built by the authors from the Deribit public trade tape ($41.5$M
+option trades). Every entry in that panel is a completed transaction, not a
+quote: there is no bid--ask, the two-sided-quote filter above cannot be
+applied, and a single stale print can set the implied volatility of an
+illiquid strike. We therefore restrict the panel to $|k|\le0.35$,
+$T\in[0.02,1.0]$ years and implied volatilities in $[0.01,2.0]$, retain at
+most eight points per maturity spread in log-moneyness exactly as above, and
+keep only Wednesdays with at least four maturities and 25 points. Trade-based
+and quote-based surfaces are each internally consistent but are not
+interchangeable: a comparison across weeks of the panel is sound, but the
+panel is not a like-for-like extension of the headline snapshot, and we do
+not present it as one. Both datasets accompany the code in derived form (the
+weekly surfaces and the daily realised variance), not as raw tapes.
+
 We set $r{=}0$, the standard convention for crypto, where there is no clean
 carry, and take the forward to be $F=S\,e^{rT}=S$ with $S$ the underlying index
 price Deribit reports alongside each instrument. Implied volatilities are
