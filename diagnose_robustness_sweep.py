@@ -61,8 +61,25 @@ def wings(d): return {nm: 1e4 * np.nanmean(d[m]) for nm, m in buckets}
 
 fpx = np.atleast_1d(price_european_fourier(1.0, strikes, T, r, P, H, N=300, u_max=120, n_u=1500))
 iv_f = ivs(fpx)
+# Resume from the per-n checkpoint. This job has now died twice mid-sweep with
+# nothing in stderr, losing hours of completed n values; each n is independent,
+# so finished ones are reloaded rather than recomputed. Delete
+# results/n_convergence_partial.json to force a clean run.
 rows = []
+try:
+    _prev = json.load(open("results/n_convergence_partial.json"))
+    _prev = _prev.get("payload", _prev)
+    if _prev["config"]["seeds"] == list(SEEDS) and abs(_prev["config"]["H"] - H) < 1e-12             and _prev["config"]["iters"] == ITERS and _prev["config"]["mc_paths"] == MC_PATHS:
+        rows = _prev["rows"]
+        print("resuming: n = %s already done" % [r_["n"] for r_ in rows], flush=True)
+    else:
+        print("checkpoint exists but its config differs; starting clean", flush=True)
+except FileNotFoundError:
+    pass
+
 for n in NLIST:
+    if any(r_["n"] == n for r_ in rows):
+        continue
     c, x = lift_weights_geometric(H + 0.5, n)
     mpx, mse = price_european_mc(1.0, strikes, T, r, P, (c, x), n_paths=MC_PATHS,
                                  n_steps=MC_STEPS, seed=MC_SEED, control_variate=True)
