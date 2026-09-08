@@ -27,7 +27,7 @@ We report the profile in the WEIGHTED objective actually optimised and in the
 UNWEIGHTED RMSE the paper quotes, because the asymmetry between them is itself
 something the manuscript now discloses.
 """
-import json, time
+import json, os, time
 import numpy as np, pandas as pd
 from scipy.optimize import minimize
 
@@ -36,9 +36,12 @@ from generate_calib import cap_points_per_maturity
 from calibrate import _model_ivs, PARAM_NAMES
 from refit_canonical import WIDE
 
-H_GRID = [0.04, 0.06, 0.09, 0.12, 0.15, 0.18, 0.22, 0.26, 0.30]
+# The first run was still falling at H=0.22, so the grid now runs to the edge of
+# the wide box (0.45) to find where the profile actually turns.
+H_GRID = [0.04, 0.06, 0.09, 0.12, 0.15, 0.18, 0.22, 0.26, 0.30, 0.35, 0.40, 0.45]
 RHO_GRID = [-0.95, -0.90, -0.85, -0.79, -0.70, -0.60, -0.45, -0.30, -0.15]
 NM = dict(maxiter=300, xatol=1e-4, fatol=1e-7)
+CKPT = "results/_profile_ckpt.jsonl"
 
 
 def make_losses(surf, r=0.0):
@@ -58,8 +61,15 @@ def make_losses(surf, r=0.0):
     return both
 
 
-def profile(surf, idx, grid, start, both):
-    """Fix parameter `idx` at each grid value; re-optimise the other five."""
+def profile(surf, idx, grid, starts, both):
+    """Fix parameter `idx` at each grid value; re-optimise the other five.
+
+    `starts` is a list of warm-start vectors. Nelder-Mead is local, and the loss
+    surface has (at least) two basins -- the canonical H~0.09 fit and the wide-box
+    H~0.25 fit -- so a single start from the canonical point would report a
+    spuriously high profile at large H. We run from every start and keep the
+    best, which is what a profile likelihood is supposed to be.
+    """
     free = [i for i in range(6) if i != idx]
     lo = np.array([WIDE[i][0] for i in free]); hi = np.array([WIDE[i][1] for i in free])
     out = []
@@ -70,20 +80,28 @@ def profile(surf, idx, grid, start, both):
             v[free] = np.clip(free_vec, lo, hi)
             return both(v)[0]
         t0 = time.time()
-        res = minimize(obj, np.array(start, float)[free], method="Nelder-Mead",
-                       bounds=list(zip(lo, hi)), options=NM)
-        # obj() clips into the box before evaluating, so the loss NM minimised is
-        # the loss at the CLIPPED point. Re-evaluating at the raw res.x would
-        # report a different (and possibly worse) number than the optimiser found
-        # -- which is exactly what happened on the first run, where the profile at
-        # the canonical H came out above the canonical loss itself.
-        v = np.array(start, float); v[idx] = g; v[free] = np.clip(res.x, lo, hi)
+        best_v, best_w = None, np.inf
+        for start in starts:
+            res = minimize(obj, np.array(start, float)[free], method="Nelder-Mead",
+                           bounds=list(zip(lo, hi)), options=NM)
+            # obj() clips into the box before evaluating, so the loss NM minimised is
+            # the loss at the CLIPPED point. Re-evaluating at the raw res.x would
+            # report a different (and possibly worse) number than the optimiser found
+            # -- which is exactly what happened on the first run, where the profile at
+            # the canonical H came out above the canonical loss itself.
+            v = np.array(start, float); v[idx] = g; v[free] = np.clip(res.x, lo, hi)
+            wv = both(v)[0]
+            if wv < best_w:
+                best_v, best_w = v, wv
+        v = best_v
         wl, ul = both(v)
         out.append(dict(fixed=float(g), weighted=wl, unweighted_vol_bp=1e4 * ul,
                         params={k: float(x) for k, x in zip(PARAM_NAMES, v)},
                         secs=time.time() - t0))
         print(f"    {PARAM_NAMES[idx]}={g:+.3f}  weighted={1e4*wl:7.1f}  "
               f"unweighted={1e4*ul:7.1f} vol bp  ({time.time()-t0:.0f}s)", flush=True)
+        with open(CKPT, "a") as f:
+            f.write(json.dumps(dict(param=PARAM_NAMES[idx], **out[-1])) + "\n")
     return out
 
 
@@ -91,15 +109,22 @@ if __name__ == "__main__":
     surf = cap_points_per_maturity(build_surface(pd.read_csv("data/deribit_chain.csv"), r=0.0))
     cal = json.load(open("calib_real.json"))
     start = [cal[k] for k in PARAM_NAMES]
+    starts = [start]
+    if os.path.exists("calib_real_wide.json"):
+        wide = json.load(open("calib_real_wide.json"))
+        starts.append([wide[k] for k in PARAM_NAMES])
+        print(f"warm starts: canonical (H={cal['H']:.3f}) and wide-box (H={wide['H']:.3f})")
     both = make_losses(surf)
     w0, u0 = both(start)
+    os.makedirs("results", exist_ok=True)
+    open(CKPT, "w").close()
     print(f"canonical: weighted {1e4*w0:.1f}, unweighted {1e4*u0:.1f} vol bp "
           f"over {len(surf)} points\n", flush=True)
 
     print("  profile in H:", flush=True)
-    prof_H = profile(surf, 0, H_GRID, start, both)
+    prof_H = profile(surf, 0, H_GRID, starts, both)
     print("\n  profile in rho:", flush=True)
-    prof_rho = profile(surf, 5, RHO_GRID, start, both)
+    prof_rho = profile(surf, 5, RHO_GRID, starts, both)
 
     # A confidence set by the standard profile rule: keep every fixed value whose
     # re-optimised fit is within a tolerance of the best. We use 5% relative
