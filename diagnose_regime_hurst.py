@@ -1,88 +1,144 @@
 r"""
-Is the recovered Hurst exponent stable across market regimes? (Reviewer 1, item 5)
-==================================================================================
+Option-implied H before and after the January 2024 spot-ETF approval.
+(Reviewer 1, item 5 -- the option-implied half; the physical half is
+diagnose_physical_hurst.py)
+=====================================================================
 
-The referee asked us to recalibrate on clearly separated periods before and after
-the 11 January 2024 US spot-ETF approval and report whether H is stable. The plan
-recorded this as item D1, NOT SOLVABLE: Deribit's public endpoint serves only live
-snapshots and historical chains are a paid vendor product.
+DATA. Weekly (Wednesday) BTC implied-vol surfaces built by hist_surface.py from
+the author's own Deribit trade-tape panel: 52 pre-ETF weeks (calendar 2023) and
+47 post-ETF weeks (February-December 2024). January 2024 is excluded entirely as
+the event window. The panel is TRADE-based whereas the headline snapshot is
+QUOTE-based; the comparison is internally consistent but not a like-for-like
+extension of the headline fit, and the manuscript says so.
 
-It is solvable. C:\Data\Options\data\surfaces\BTC_slices.parquet holds a daily BTC
-IV panel from 2016-12-22 to 2026-08-13, built from the Deribit trade tape by the
-sibling Options project (author's own collection, public API). See hist_surface.py
-for the schema map and -- importantly -- for the quote-vs-trade provenance caveat
-that the manuscript must disclose.
+DESIGN, and why it changed. The first version of this script ran a light
+differential-evolution fit on every week. Then the profile-likelihood study
+(diagnose_calib_uncertainty.py) showed that a single surface does not pin H: the
+loss has a long, nearly flat ridge from the canonical H~0.09 fit to the wide-box
+H~0.25 fit. A light global optimiser lands at a seed-dependent point on that
+ridge, so week-to-week variation in its H would be optimiser noise, not market
+information, and a pre/post test on it would be meaningless.
 
-DESIGN CHOICES, and why
------------------------
-1. WEEKLY, NOT DAILY. 52 pre + 47 post surfaces is ample for a two-sample
-   comparison and keeps the run overnight-sized. Daily would multiply cost by 5
-   for a variance reduction that autocorrelation would mostly eat anyway.
+So every week is now fitted TWICE by local Nelder-Mead, warm-started from the
+two ends of the ridge -- the canonical vector and the wide-box vector -- with
+the other five parameters free inside the wide box. Nothing is warm-started
+from the previous week: sequential warm-starting biases toward continuity,
+which is the null being tested. Each fit records H, rho, nu and the loss. We
+then ask three questions of the pre/post split:
 
-2. EVERY FIT INDEPENDENT -- no sequential warm-starting. Warm-starting each date
-   from the previous one is the cheap way to run a calibration time series, but it
-   biases the estimate toward continuity, which is precisely the null we are
-   testing. An identical fixed-budget global search on every date cannot smooth the
-   transition it is being used to detect.
+  1. Does H move, holding the basin fixed?  (H from each start, pre vs post)
+  2. Does the market change WHICH basin it prefers?  The sign and size of
+     loss(wide start) - loss(canonical start), pre vs post.
+  3. Do the parameters the surface DOES identify move?  rho and nu, pre vs post.
 
-3. JANUARY 2024 EXCLUDED ENTIRELY. The approval week is the event, not a sample
-   from either regime.
+Tests: Welch t, Mann-Whitney, and a 4-week block bootstrap on the difference in
+means (weekly fits are persistent; an i.i.d. resample would understate the SE).
+Every fit is checkpointed to results/_regime_ckpt.jsonl as it completes.
 
-4. The comparison is reported as a Welch t-test AND a Mann-Whitney U, because H
-   across dates is not obviously normal and the two tests fail differently. A
-   block bootstrap over 4-week blocks handles the autocorrelation that both
-   ignore.
+Usage:  REGIME_WORKERS=4 python diagnose_regime_hurst.py [limit]
 """
 import json, os, sys, time
 import numpy as np, pandas as pd
 from multiprocessing import Pool
+from scipy.optimize import minimize
 
 from hist_surface import load_panel, surface_for_date, trading_dates
-from calibrate import calibrate
+from calibrate import PARAM_NAMES
 from refit_canonical import WIDE
+from diagnose_calib_uncertainty import make_losses, NM
 
 PRE = ("2023-01-01", "2023-12-31")
 POST = ("2024-02-01", "2024-12-31")
-DE_MAXITER, DE_POPSIZE, DE_SEED = 10, 8, 1
 CKPT = "results/_regime_ckpt.jsonl"
+STARTS = dict(canonical="calib_real.json", wide="calib_real_wide.json")
+
+
+def load_starts():
+    out = {}
+    for name, path in STARTS.items():
+        if os.path.exists(path):
+            d = json.load(open(path))
+            out[name] = [float(d[k]) for k in PARAM_NAMES]
+    return out
 
 
 def fit_one(args):
-    date, surf_records = args
+    date, surf_records, starts = args
     surf = pd.DataFrame(surf_records)
+    both = make_losses(surf)
+    lo = np.array([b[0] for b in WIDE]); hi = np.array([b[1] for b in WIDE])
     t0 = time.time()
+    fits = {}
     try:
-        p, d = calibrate(surf, r=0.0, maxiter=DE_MAXITER, popsize=DE_POPSIZE,
-                         seed=DE_SEED, polish=True, verbose=False,
-                         bounded_polish=True, bounds=WIDE)
+        for name, start in starts.items():
+            def obj(v):
+                return both(np.clip(v, lo, hi))[0]
+            res = minimize(obj, np.array(start, float), method="Nelder-Mead",
+                           bounds=list(zip(lo, hi)), options=NM)
+            v = np.clip(res.x, lo, hi)
+            w, u = both(v)
+            fits[name] = dict(weighted_vol_bp=1e4 * w, unweighted_vol_bp=1e4 * u,
+                              nfev=int(res.nfev), **{k: float(x) for k, x in zip(PARAM_NAMES, v)})
     except Exception as e:
         return dict(date=str(date), ok=False, error=repr(e))
     return dict(date=str(date), ok=True, secs=time.time() - t0,
-                n_points=int(d["n_points"]), n_maturities=int(surf["T"].nunique()),
-                F=float(surf["F"].iloc[0]), rmse_vol_bp=float(d["rmse_vol_bp"]),
-                **{k: float(v) for k, v in p.items()})
+                n_points=int(len(surf)), n_maturities=int(surf["T"].nunique()),
+                F=float(surf["F"].iloc[0]), fits=fits)
 
 
-def build_jobs(panel, window):
+def build_jobs(panel, window, starts):
     jobs = []
     for d in trading_dates(panel, *window):
         s = surface_for_date(panel, d)
         if s is not None:
-            jobs.append((d.date(), s.to_dict("records")))
+            jobs.append((d.date(), s.to_dict("records"), starts))
     return jobs
+
+
+def compare(label, a, b, unit="", rng_seed=0, B=10000, blk=4):
+    """Pre vs post: Welch, Mann-Whitney, 4-week block bootstrap on the mean difference."""
+    from scipy import stats
+    a, b = np.asarray(a, float), np.asarray(b, float)
+    tt = stats.ttest_ind(a, b, equal_var=False)
+    mw = stats.mannwhitneyu(a, b, alternative="two-sided")
+    rng = np.random.default_rng(rng_seed)
+
+    def resample(x):
+        nb = int(np.ceil(len(x) / blk))
+        st = rng.integers(0, max(len(x) - blk, 1), nb)
+        return np.concatenate([x[s:s + blk] for s in st])[:len(x)]
+
+    diffs = np.array([resample(a).mean() - resample(b).mean() for _ in range(B)])
+    lo, hi = np.percentile(diffs, [2.5, 97.5])
+    differs = bool(lo > 0 or hi < 0)
+    print(f"\n  {label}")
+    print(f"    pre  n={len(a):3d}  mean {a.mean():+.4f} +- {a.std(ddof=1):.4f}  median {np.median(a):+.4f}")
+    print(f"    post n={len(b):3d}  mean {b.mean():+.4f} +- {b.std(ddof=1):.4f}  median {np.median(b):+.4f}")
+    print(f"    pre - post = {a.mean()-b.mean():+.4f} {unit}   Welch p = {tt.pvalue:.4f}   "
+          f"MW p = {mw.pvalue:.4f}   block-bootstrap 95% CI [{lo:+.4f}, {hi:+.4f}]"
+          f"  -> {'DIFFERS' if differs else 'stable'}")
+    return dict(n_pre=int(len(a)), n_post=int(len(b)),
+                pre_mean=float(a.mean()), pre_sd=float(a.std(ddof=1)), pre_median=float(np.median(a)),
+                post_mean=float(b.mean()), post_sd=float(b.std(ddof=1)), post_median=float(np.median(b)),
+                diff=float(a.mean() - b.mean()), welch_t=float(tt.statistic), welch_p=float(tt.pvalue),
+                mannwhitney_p=float(mw.pvalue), boot_ci95=[float(lo), float(hi)], differs=differs)
 
 
 if __name__ == "__main__":
     nproc = int(os.environ.get("REGIME_WORKERS", "4"))
     limit = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
+    starts = load_starts()
+    assert "canonical" in starts, "calib_real.json missing"
+    print("warm starts: " + ", ".join(f"{k} (H={v[0]:.3f})" for k, v in starts.items()), flush=True)
+
     panel = load_panel()
-    jobs = [("pre", j) for j in build_jobs(panel, PRE)] + \
-           [("post", j) for j in build_jobs(panel, POST)]
+    jobs = [("pre", j) for j in build_jobs(panel, PRE, starts)] + \
+           [("post", j) for j in build_jobs(panel, POST, starts)]
     if limit:
         jobs = jobs[:limit]
-    print(f"[regime] {len(jobs)} fits ({sum(r=='pre' for r,_ in jobs)} pre, "
-          f"{sum(r=='post' for r,_ in jobs)} post) on {nproc} workers", flush=True)
+    print(f"[regime] {len(jobs)} weeks ({sum(r=='pre' for r,_ in jobs)} pre, "
+          f"{sum(r=='post' for r,_ in jobs)} post) x {len(starts)} starts on {nproc} workers", flush=True)
 
     os.makedirs("results", exist_ok=True)
     open(CKPT, "w").close()
@@ -94,62 +150,49 @@ if __name__ == "__main__":
             with open(CKPT, "a") as fh:      # checkpoint every fit; J1 taught us
                 fh.write(json.dumps(res) + "\n")
             if res["ok"]:
-                print(f"  {res['date']} {regime:4s} H={res['H']:.4f} rho={res['rho']:+.3f} "
-                      f"nu={res['nu']:.3f} rmse={res['rmse_vol_bp']:.0f}bp "
-                      f"({res['secs']:.0f}s)  [{len(rows)}/{len(jobs)}]", flush=True)
+                f = res["fits"]
+                msg = "  ".join(f"{k}: H={v['H']:.3f} rho={v['rho']:+.2f} nu={v['nu']:.2f} "
+                                f"w={v['weighted_vol_bp']:.0f}" for k, v in f.items())
+                print(f"  {res['date']} {regime:4s} {msg}  ({res['secs']:.0f}s) [{len(rows)}/{len(jobs)}]", flush=True)
             else:
                 print(f"  {res['date']} {regime:4s} FAILED {res['error'][:80]}", flush=True)
-    print(f"[regime] {len(rows)} fits in {(time.time()-t0)/60:.1f} min", flush=True)
+    print(f"[regime] {len(rows)} weeks in {(time.time()-t0)/60:.1f} min", flush=True)
 
-    df = pd.DataFrame([r for r in rows if r["ok"]])
+    ok = [r for r in rows if r["ok"]]
+    flat = []
+    for r in ok:
+        row = dict(date=r["date"], regime=r["regime"], n_points=r["n_points"], F=r["F"])
+        for k, v in r["fits"].items():
+            row.update({f"{k}_{kk}": vv for kk, vv in v.items()})
+        if "canonical" in r["fits"] and "wide" in r["fits"]:
+            row["dloss_wide_minus_can"] = r["fits"]["wide"]["weighted_vol_bp"] - r["fits"]["canonical"]["weighted_vol_bp"]
+        flat.append(row)
+    df = pd.DataFrame(flat)
     df.to_csv("results/regime_fits.csv", index=False)
+    pre, post = df[df.regime == "pre"], df[df.regime == "post"]
 
-    from scipy import stats
-    a = df[df.regime == "pre"]["H"].values
-    b = df[df.regime == "post"]["H"].values
-    tt = stats.ttest_ind(a, b, equal_var=False)
-    mw = stats.mannwhitneyu(a, b, alternative="two-sided")
-
-    # 4-week block bootstrap on the difference in means: weekly H is persistent,
-    # so an i.i.d. resample would understate the standard error.
-    rng = np.random.default_rng(0)
-    B, blk, diffs = 10000, 4, []
-    for _ in range(B):
-        def resample(x):
-            nb = int(np.ceil(len(x) / blk))
-            st = rng.integers(0, max(len(x) - blk, 1), nb)
-            return np.concatenate([x[s:s + blk] for s in st])[:len(x)]
-        diffs.append(resample(a).mean() - resample(b).mean())
-    diffs = np.array(diffs)
-    lo, hi = np.percentile(diffs, [2.5, 97.5])
-
-    print("\n==== H by regime ====")
-    for lbl, x in [("pre-ETF (2023)", a), ("post-ETF (2024)", b)]:
-        print(f"  {lbl:16s} n={len(x):3d}  H = {x.mean():.4f} +- {x.std(ddof=1):.4f}"
-              f"  median {np.median(x):.4f}  [{x.min():.3f}, {x.max():.3f}]")
-    print(f"  difference (pre - post) = {a.mean()-b.mean():+.4f}")
-    print(f"  Welch t = {tt.statistic:+.3f}, p = {tt.pvalue:.4f}")
-    print(f"  Mann-Whitney U p = {mw.pvalue:.4f}")
-    print(f"  4-week block bootstrap 95% CI on the difference: [{lo:+.4f}, {hi:+.4f}]")
-    print(f"  => H {'DIFFERS' if (lo>0 or hi<0) else 'is STABLE'} across the regimes "
-          f"at the 5% level (bootstrap CI {'excludes' if (lo>0 or hi<0) else 'includes'} 0)")
+    print("\n==== pre-ETF (2023) vs post-ETF (Feb-Dec 2024) ====")
+    summary = {}
+    for name in starts:
+        summary[f"H_{name}"] = compare(f"H, {name} start", pre[f"{name}_H"], post[f"{name}_H"])
+    summary["rho_canonical"] = compare("rho, canonical start", pre["canonical_rho"], post["canonical_rho"])
+    summary["nu_canonical"] = compare("nu, canonical start", pre["canonical_nu"], post["canonical_nu"])
+    summary["fit_canonical"] = compare("weighted fit (vol bp), canonical start",
+                                       pre["canonical_weighted_vol_bp"], post["canonical_weighted_vol_bp"], "vol bp")
+    if "dloss_wide_minus_can" in df:
+        summary["basin"] = compare("loss(wide start) - loss(canonical start), vol bp; <0 prefers the smoother basin",
+                                   pre["dloss_wide_minus_can"], post["dloss_wide_minus_can"], "vol bp")
+        summary["basin"]["frac_prefer_wide_pre"] = float((pre["dloss_wide_minus_can"] < 0).mean())
+        summary["basin"]["frac_prefer_wide_post"] = float((post["dloss_wide_minus_can"] < 0).mean())
+        print(f"    weeks preferring the wide (smoother-H) basin: pre {100*summary['basin']['frac_prefer_wide_pre']:.0f}%, "
+              f"post {100*summary['basin']['frac_prefer_wide_post']:.0f}%")
 
     from resultio import dump
     dump("regime_hurst", dict(
-        config=dict(pre=PRE, post=POST, de_maxiter=DE_MAXITER, de_popsize=DE_POPSIZE,
-                    de_seed=DE_SEED, bounds=[list(x) for x in WIDE],
+        config=dict(pre=PRE, post=POST, starts=starts, nelder_mead=NM,
+                    bounds=[list(x) for x in WIDE],
                     source="C:/Data/Options/data/surfaces/BTC_slices.parquet",
                     provenance="Deribit trade tape (author's own public-API collection)",
-                    n_bootstrap=B, block_weeks=blk),
-        fits=rows,
-        summary=dict(
-            pre=dict(n=len(a), H_mean=float(a.mean()), H_sd=float(a.std(ddof=1)),
-                     H_median=float(np.median(a))),
-            post=dict(n=len(b), H_mean=float(b.mean()), H_sd=float(b.std(ddof=1)),
-                      H_median=float(np.median(b))),
-            diff=float(a.mean() - b.mean()),
-            welch_t=float(tt.statistic), welch_p=float(tt.pvalue),
-            mannwhitney_p=float(mw.pvalue),
-            boot_ci95=[float(lo), float(hi)],
-            differs=bool(lo > 0 or hi < 0))))
+                    n_bootstrap=10000, block_weeks=4),
+        fits=rows, summary=summary))
     print("\nsaved -> results/regime_hurst.json, results/regime_fits.csv")
