@@ -63,13 +63,16 @@ def _model_ivs(params_vec, surf, r):
 
 
 def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
-              verbose=True, bounded_polish=False):
+              verbose=True, bounded_polish=False, bounds=None):
     """
     Calibrate rough Heston to the surface. Returns (params_dict, diagnostics).
 
-    bounded_polish : confine the Nelder-Mead polish to BOUNDS. False reproduces
-        the canonical calib_real.json, whose theta escaped the box (see below).
+    bounded_polish : confine the Nelder-Mead polish to the box. False reproduces
+        the canonical calib_real.json, whose theta escaped it (see below).
+    bounds : override the module-level BOUNDS. Used by refit_canonical.py to test
+        whether the canonical optimum survives a box wide enough to contain it.
     """
+    bnds = BOUNDS if bounds is None else bounds
     w = surf["weight"].values
     mkt = surf["iv"].values
     wnorm = w / w.sum()
@@ -89,7 +92,7 @@ def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
     if verbose:
         print("Calibrating rough Heston (differential evolution)...")
     result = differential_evolution(
-        loss, BOUNDS, maxiter=maxiter, popsize=popsize, seed=seed,
+        loss, bnds, maxiter=maxiter, popsize=popsize, seed=seed,
         tol=1e-4, mutation=(0.5, 1.0), recombination=0.7,
         polish=False, disp=verbose)
 
@@ -106,7 +109,7 @@ def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
         # long-run vol level is well above 45%). bounded_polish=True confines the
         # polish to BOUNDS; the manuscript discloses which was used.
         loc = minimize(loss, best, method="Nelder-Mead",
-                       bounds=(BOUNDS if bounded_polish else None),
+                       bounds=(bnds if bounded_polish else None),
                        options=dict(maxiter=200, xatol=1e-4, fatol=1e-6))
         if loc.fun < best_loss:
             best = loc.x
@@ -122,6 +125,7 @@ def calibrate(surf, r=0.065, maxiter=25, popsize=12, seed=0, polish=True,
                        final_loss=best_loss,
                        de_loss=float(result.fun),
                        bounded_polish=bool(bounded_polish),
+                       bounds=[list(b) for b in bnds],
                        model_iv=model, market_iv=mkt)
     if verbose:
         print(f"Done. Fit RMSE = {rmse_bp:.1f} vol bp over {mask.sum()} points.")

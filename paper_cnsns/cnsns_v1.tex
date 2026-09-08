@@ -45,21 +45,11 @@ Fast Warm-Start Hybrid}
 
 %% ----- Highlights (3-5 bullets, max 85 characters each) --------
 \begin{highlights}
-\item Calibrating rough-volatility models is an inverse problem with no
-      finite-dimensional forward PDE; we solve a Markovian-lifted surrogate PDE
-      with a physics-informed neural network (PINN) forward operator.
-\item The forward solver's error grows only sub-linearly in the lifted dimension
-      ($<11\,\mathrm{px\,bp}$ to $n{=}32$), giving a controllable, convergent
-      approximation to the true forward map that the naive grid cannot match.
-\item An explicit error decomposition separates forward-solver (network) error
-      from forward-model (lift) error, isolating what limits inverse-problem
-      accuracy and by how much.
-\item A parametric PINN forward operator, differentiable in the model
-      parameters, warm-starts the calibration inverse problem at
-      ${\sim}9\times$ fewer expensive forward-model evaluations.
-\item We report where the AI forward operator's generalisation degrades (rough,
-      high-vol-of-vol parameter corners) so its use inside the inverse problem is
-      bounded honestly, not oversold.
+\item PINN forward solver for the Markovian-lifted rough-Heston pricing PDE
+\item Solver error grows sub-linearly in lift dimension where a grid cost explodes
+\item Explicit decomposition separates network solve error from lift model error
+\item Parametric PINN warm-start cuts expensive forward-model calls about 9-fold
+\item Accuracy limits mapped: error grows in rough, high vol-of-vol corners
 \end{highlights}
 
 %% ----- Abstract ------------------------------------------------
@@ -82,8 +72,10 @@ would. It does not: measured against an independent lifted Monte Carlo at the
 same $n$, and cleanly separated from the model-approximation error of the lift
 itself, the network's solve-error grows only sub-linearly---from
 $5.4\pm1.0$ to $10.7\pm2.0$ price basis points as $n$ climbs from 4 to 32---while
-a naive finite-difference grid needs $50^{n+1}$ points and is infeasible by
-$n{=}8$. We detail the four architecture and training choices needed for this
+a naive full-tensor finite-difference grid would need $50^{n+1}$ points and is
+infeasible by $n{=}8$. That count is an illustrative memory bound for the naive
+discretisation, not a benchmark against a tuned solver: sparse-grid, ADI and
+tensor-train methods reach substantially higher dimensions. We detail the four architecture and training choices needed for this
 convergence behaviour to hold in practice: a hard-constrained initial-condition
 ansatz, an integrated-variance baseline anchor, self-adaptive loss weighting, and
 a causal time-to-maturity curriculum. We then embed a parametric extension of
@@ -95,7 +87,12 @@ against the true (Fourier) forward model, it recovers full calibration quality
 at approximately nine times fewer expensive forward-model evaluations. All
 experiments calibrate to live Bitcoin option data from the Deribit exchange,
 recovering a genuinely rough Hurst exponent ($H\approx0.09$) with strong negative
-correlation ($\rho\approx-0.79$).
+correlation ($\rho\approx-0.79$). We report the fit quality plainly: the
+vega-weighted implied-vol RMSE is $496$ vol\bp{}, which is coarse. That
+coarseness measures the lifted rough-Heston forward model's expressiveness on
+wide, richly curved crypto smiles---the filtered surface is free of static
+arbitrage, so it is not a data artefact---and is orthogonal to the neural
+forward operator's solve-error, which is the quantity this paper studies.
 \end{abstract}
 
 \begin{keyword}
@@ -252,7 +249,7 @@ Under rough Heston the spot price $S$ and its instantaneous variance $V$ satisfy
   V_t  &= V_0 + \int_0^t K(t-s)\,\lambda(\theta - V_s)\,ds
           + \int_0^t K(t-s)\,\nu\sqrt{V_s}\,dW^V_s,
 \end{align}
-where $W^S, W^V$ are Brownian motions with correlation $\rho$, and
+where $W^S$ and $W^V$ are Brownian motions with correlation $\rho$, while
 $K(t)=t^{\alpha-1}/\Gamma(\alpha)$ is the fractional kernel with
 $\alpha=H+\tfrac12$ and $H<\tfrac12$ \citep{gatheral2018volatility,eleuch2019characteristic}.
 The variance is a Volterra process: non-Markovian, non-semimartingale, and
@@ -270,10 +267,11 @@ The Markovian lift replaces $K$ with
 $K(t)\approx\sum_{i=1}^{n}c_i e^{-x_i t}$, introducing $n$
 Ornstein--Uhlenbeck factors $U^i$,
 \begin{equation}
-  dU^i_t = \left[-x_i U^i_t + \lambda\left(\theta - V_t\right)\right]dt
-           + \nu\sqrt{V^+_t}\,dW^V_t,
-  \qquad U^i_0 = 0,
-  \qquad V_t = V_0 + \sum_{i=1}^{n} c_i U^i_t,
+  \begin{split}
+  dU^i_t &= \left[-x_i U^i_t + \lambda\left(\theta - V_t\right)\right]dt
+           + \nu\sqrt{V^+_t}\,dW^V_t, \qquad U^i_0 = 0,\\
+  V_t &= V_0 + \sum_{i=1}^{n} c_i U^i_t,
+  \end{split}
   \label{eq:lift}
 \end{equation}
 where $V^+_t=\max(V_t,0)$
@@ -337,7 +335,7 @@ and training hyperparameters.
 \caption{Architecture and training hyperparameters of the PINN forward operator.
 Values in parentheses are for the parametric extension (Section~\ref{sec:parametric}).}
 \label{tab:arch}
-\begin{tabular}{ll}
+\begin{tabularx}{\linewidth}{@{}l >{\raggedright\arraybackslash}X@{}}
 \toprule
 \textbf{Component} & \textbf{Value} \\
 \midrule
@@ -377,7 +375,7 @@ Ramp fraction & Linear growth to $T$ over first $50\%$ of iterations \\
 \multicolumn{2}{l}{\textit{Hardware}} \\
 Platform & CPU (single machine); code is GPU-compatible (\texttt{torch.device}) \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 \subsection{Hard-constrained initial-condition ansatz}
@@ -557,8 +555,7 @@ own contribution to inverse-problem error. The \emph{lift-error} is a
 forward-model approximation that only increasing $n$ can reduce; it is not the
 network's responsibility, and no amount of network re-training removes it.
 Conflating the two gives a systematically pessimistic view of the AI method and
-leads to the wrong engineering response inside a calibration pipeline---e.g.\
-training longer when the correct response is to raise $n$.
+leads to the wrong engineering response inside a calibration pipeline---e.g.\ training longer when the correct response is to raise $n$.
 
 \paragraph{Units, stated once.} Two units appear in this paper and a referee
 rightly asked us to connect them explicitly. Price errors are in basis points of
@@ -700,6 +697,32 @@ We compare three ways of solving the same calibration inverse problem.
         model then sharpens it.
 \end{enumerate}
 
+\paragraph{Optimiser settings, stated once.}
+Two distinct budgets appear in this paper and conflating them would misstate the
+speed-up, so we separate them explicitly. The \emph{full-budget market
+calibration} of Section~\ref{sec:btc} uses SciPy's \texttt{differential\_evolution}
+over the six-parameter box with \texttt{maxiter}${=}60$, \texttt{popsize}${=}12$,
+\texttt{tol}${=}10^{-4}$, mutation $(0.5,1.0)$, recombination $0.7$ and seed $1$,
+with the built-in polish disabled, followed by a separate Nelder--Mead refinement
+(\texttt{maxiter}${=}200$, \texttt{xatol}${=}10^{-4}$, \texttt{fatol}${=}10^{-6}$).
+The \emph{three-route comparison} of this section runs on the single $T{=}0.15$
+slice with a deliberately lighter global budget---\texttt{maxiter}${=}30$,
+\texttt{popsize}${=}10$, seed $1$---and a Nelder--Mead polish capped at $120$
+iterations. All forward-model evaluation counts we report, including the
+$2018$-evaluation from-scratch baseline against which the ${\approx}9\times$
+saving is measured, come from this lighter configuration; they are not comparable
+to the full-budget market fit, and we do not claim they are.
+
+We also record one consequence of the optimiser's structure that a reader
+re-running the code would otherwise discover for themselves. In the original
+full-budget fit the Nelder--Mead refinement was run \emph{unbounded}, and the
+long-run variance $\theta$ settled at $0.2525$---outside the $(0.005,0.20)$
+interval the global search had explored. The escape improves the fit and the
+value is economically unremarkable for Bitcoin (a long-run volatility near
+$50\%$), so the issue was a search box that was too tight rather than a spurious
+optimum. Section~\ref{sec:btc} reports the fit obtained after widening the box to
+contain it and re-running the global search with the polish confined to the box.
+
 % ================================================================
 \section{Results}
 \label{sec:results}
@@ -724,11 +747,22 @@ needs $50^{n+1}$ points: $3.1\times10^{8}$ at $n{=}4$, $2.0\times10^{15}$ at
 $n{=}8$, and $1.2\times10^{56}$ at $n{=}32$. Even $n{=}8$---roughly $16$
 petabytes in double precision---is out of reach as a forward operator inside any
 iterative inverse-problem solver, while the network trains every $n$ on a
-laptop. Structured schemes (sparse grids, ADI, low-rank tensor-train) reach
-further but still degrade with $n$; none is standard or validated for this
-coupled $\rho$--$\nu$ PDE. The conservative verdict is that a competitive grid
-forward solver at $n{=}16$--$32$ is \emph{impractical}, not provably impossible,
-as the engine of a calibration loop.
+laptop. We stress that $50^{n+1}$ is an illustrative memory bound for the naive
+full-tensor discretisation and not a benchmark against a tuned solver.
+Structured schemes reach considerably further: sparse grids
+\citep{bungartz2004sparse,reisinger2007efficient} break the full-tensor node
+count, ADI splitting handles the correlation cross-terms efficiently in the
+classical Heston setting \citep{hout2010adi}, and low-rank tensor-train
+representations \citep{oseledets2011tensor} compress high-dimensional operators
+where the solution admits low-rank structure. Each, however, still degrades with
+$n$---sparse-grid node counts and error constants grow super-linearly in the
+dimension, and the tensor-train ranks that make the method cheap are eroded by
+precisely the coupled $\rho$--$\nu$ cross-terms this PDE carries---and none is
+standard or validated for the lifted rough-volatility PDE. We therefore make the
+conservative claim, and only it: a competitive grid-based forward solver at
+$n{=}16$--$32$ is \emph{impractical} as the engine of a calibration loop, not
+provably impossible. Establishing the stronger claim would require building and
+tuning such a solver, which is a research programme in its own right.
 
 \begin{table}[t]
 \centering
@@ -737,7 +771,8 @@ $T{=}0.15$ on the canonical BTC calibration. Solve-error is 3-seed
 mean\,$\pm$\,SD in price basis points of spot; lift-error and FD grid size are
 deterministic.}
 \label{tab:nconv}
-\begin{tabular}{r r r r r}
+\small
+\begin{tabular}{@{}r r r r r@{}}
 \toprule
 $n$ & solve-error (px\bp) & lift-error (px\bp) & train time (s) & FD grid $50^{(n+1)}$\\
 \midrule
@@ -847,7 +882,9 @@ not recommend the standalone parametric operator as an inverse-problem solver.
 
 Used as a warm start it is effective. Seeding a Nelder--Mead polish against the
 true forward model with the network's parameter guess reaches
-$29.4\pm7.1$ vol\bp{}---on par with the from-scratch result on a 34--52\% smile---in
+$29.4\pm7.1$ vol\bp{}, on par with the from-scratch result---the $T{=}0.15$
+slice being fitted carries market implied vols spanning roughly 34\% to 52\%
+across the strike range, so a 29 vol\bp{} RMSE is well inside a quoted spread---in
 only $237\pm46$ true-forward-model evaluations and ${\approx}23$\,s: roughly nine
 times fewer expensive forward-model calls and seven times faster than solving the
 inverse problem from scratch. The value proposition is amortised: train the AI
@@ -862,7 +899,7 @@ slice, three methods, 3 PINN seeds. All fit-quality figures are judged by the
 true Fourier forward model over the same feasible region.}
 \label{tab:calib}
 \small
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.36\linewidth} c c c@{}}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X c c c@{}}
 \toprule
 Method & Fit RMSE (vol\bp) & Wall-clock (s) & True-model evals \\
 \midrule
@@ -870,7 +907,7 @@ True-forward-model loop, from scratch & $23.7$       & $168$      & $2018$     \
 AI-only (single-shot)                 & $222\pm20$   & ${\sim}2$  & $0$        \\
 Hybrid (AI warm start, true-model polish) & $29.4\pm7.1$ & $23$   & $237\pm46$ \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 \begin{figure}[t]\centering
@@ -908,8 +945,8 @@ level bias remains and propagates directly into every downstream calibration.
 Without MC-informed factor sampling, the smile flattens and RMSE roughly
 doubles. Without self-adaptive weighting or the $\tau$-curriculum, seed variance
 is markedly higher (from $339\pm62$ to $310\pm28$ vol\bp{} in an early stability
-comparison). Each of these choices is transferable to other AI forward operators
-for high-dimensional inverse problems.
+comparison). Each of these choices carries over to other AI forward
+operators for high-dimensional inverse problems.
 
 \paragraph{A lesson about validating AI forward operators.}
 The error decomposition revealed something methodologically important. When a
@@ -1038,12 +1075,13 @@ The instantaneous covariation matrix of $Z$ follows from the fact that the
 system is driven by only \emph{two} Brownian motions, $B$ and $W^V$, whatever
 the value of $n$:
 \begin{equation}
-  \frac{d\langle X,X\rangle_t}{dt}=V^+_t,
+  \begin{split}
+  \frac{d\langle X,X\rangle_t}{dt}&=V^+_t,
   \qquad
-  \frac{d\langle X,U^i\rangle_t}{dt}=\rho\nu V^+_t,
-  \qquad
-  \frac{d\langle U^i,U^j\rangle_t}{dt}=\nu^2 V^+_t
+  \frac{d\langle X,U^i\rangle_t}{dt}=\rho\nu V^+_t,\\
+  \frac{d\langle U^i,U^j\rangle_t}{dt}&=\nu^2 V^+_t
   \quad\text{for \emph{all} }i,j.
+  \end{split}
 \end{equation}
 The last identity is the crux. Every factor is driven by the same increment
 $dW^V_t$ and differs only through its mean-reversion speed $x_i$, so the factor

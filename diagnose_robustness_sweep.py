@@ -98,7 +98,17 @@ for n in NLIST:
                      signed_lift_iv_bp=(1e4 * (iv_m - iv_f)).tolist(),
                      signed_total_iv_bp=(1e4 * (iv_p - iv_f)).tolist()))
     print(f"n={n:2d}: solve = {solves.mean():5.1f} +- {solves.std():4.1f} price-bp  "
-          f"(seeds {np.round(solves,1)}) | lift = {lift_price:5.1f} price-bp")
+          f"(seeds {np.round(solves,1)}) | lift = {lift_price:5.1f} price-bp", flush=True)
+    # Checkpoint after every n. The first attempt at this sweep died silently ~4 h in,
+    # after finishing n=4, and lost everything because the only dump was at the end.
+    from resultio import dump as _dump
+    _dump("n_convergence_partial", dict(
+        note="partial sweep; complete through the n values listed in rows",
+        config=dict(params=P, H=H, T=T, r=r, iters=ITERS, seeds=list(SEEDS),
+                    nlist=NLIST, strikes=strikes.tolist(),
+                    mc_paths=MC_PATHS, mc_steps=MC_STEPS, mc_seed=MC_SEED,
+                    mc_control_variate=True, width=64, depth=4, x_halfwidth=1.2),
+        done=[r_["n"] for r_ in rows], rows=rows))
 
 print("\n==== PART 1: solve-error mean+-std vs n (price bp) ====")
 print(f"{'n':>3}{'lift':>9}{'solve_mean':>12}{'solve_std':>11}")
