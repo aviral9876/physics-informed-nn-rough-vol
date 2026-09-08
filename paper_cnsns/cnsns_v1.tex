@@ -931,6 +931,13 @@ $n_{\mathrm{col}}$ & solve-error & residual & min \\
 \end{tabular}
 \end{table}
 \fi
+\IfFileExists{../figures/fig_hparams.png}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{figure}[!htbp]\centering
+\includegraphics[width=0.70\linewidth]{fig_hparams.png}
+\caption{Solve-error (left axis) and held-out PDE residual (right axis) across the lift dimension $n$, width 64 / depth 4, two seeds.}
+\label{fig:hparams}
+\end{figure}
+\fi
 
 \subsection{Error decomposition and a design rule for $n$}
 \label{sec:decomp_results}
@@ -986,6 +993,13 @@ Configuration & solve-error & puts & ATM & calls \\
 \bottomrule
 \end{tabular}
 \end{table}
+\fi
+\IfFileExists{../figures/fig_signed.png}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{figure}[!htbp]\centering
+\includegraphics[width=0.75\linewidth]{fig_signed.png}
+\caption{Signed solve-error by strike (network minus lifted MC, implied-vol basis points), seed-averaged, at $n{=}4,8,16,32$. The put wing stays near zero while the ATM and call errors grow with $n$.}
+\label{fig:signed}
+\end{figure}
 \fi
 
 \subsection{Solving the inverse problem: Bitcoin is genuinely rough}
@@ -1073,6 +1087,13 @@ $H$ & weighted & unweighted & $\nu$ & $\rho$ & $\lambda$ \\
 \bottomrule
 \end{tabular}
 \end{table}
+\fi
+\IfFileExists{../figures/fig_profile.png}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{figure}[!htbp]\centering
+\includegraphics[width=0.90\linewidth]{fig_profile.png}
+\caption{Profile likelihood on the headline surface. Left: $H$ fixed on a grid, the other five parameters re-optimised from both ends of the ridge; right: the same for $\rho$. Vertical line: the canonical fit; dotted line: 5\% above the best profile value, the interval rule.}
+\label{fig:profile}
+\end{figure}
 \fi
 \IfFileExists{tables/risk.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 \paragraph{What the ridge costs in risk terms}
@@ -1164,6 +1185,13 @@ Quantity & pre-ETF & post-ETF & diff. & 95\% CI & $p$ \\
 \end{tabular}
 \end{table}
 \fi
+\IfFileExists{../figures/fig_regime.png}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{figure}[!htbp]\centering
+\includegraphics[width=0.90\linewidth]{fig_regime.png}
+\caption{Weekly option-implied $H$ from the trade-tape panel, fitted from both ends of the ridge (top), and which end each week prefers (bottom: loss from the wide-box start minus loss from the canonical start, negative preferring the smoother $H$). Shaded: January 2024, excluded as the ETF-approval window.}
+\label{fig:regime}
+\end{figure}
+\fi
 
 \subsection{A parametric AI forward operator inside the inverse problem}
 \label{sec:parametric}
@@ -1180,6 +1208,13 @@ The penalty is uneven: it hovers near $9$--$11$ px\bp{} at typical parameter
 vectors but climbs to $47.7$ in the rough low-$H$ corner and $29.8$ at high
 $\nu$, where the PDE is stiffest---the generalisation limit of this AI forward
 operator, stated explicitly rather than averaged away.
+\IfFileExists{../figures/fig_heatmap.png}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{figure}[!htbp]\centering
+\includegraphics[width=0.90\linewidth]{fig_heatmap.png}
+\caption{Parametric solve-error over $(H,\nu)$ at the box centre in $(\rho,\lambda,\theta)$, $n{=}10$, seed-averaged, against a lifted Monte Carlo at every cell. Titles give the interaction coefficient $d$ of $\mathrm{err}\sim a+b/H+c\nu+d\,\nu/H$ and its partial $R^2$.}
+\label{fig:heatmap}
+\end{figure}
+\fi
 
 Used as a standalone inverse-problem solver the parametric operator is fast
 (approximately $2$\,s, zero true-model calls) but poor: $222\pm20$ vol\bp{}
@@ -1213,9 +1248,15 @@ true Fourier forward model over the same feasible region.}
 \toprule
 Method & Fit RMSE (vol\bp) & Wall-clock (s) & True-model evals \\
 \midrule
+%% rows come from make_tables.py (results/param_boxes.json) once the w96/d5 nets on both
+%% boxes are evaluated; the hand-typed w80/d4 single-box rows below are the fallback
+\IfFileExists{tables/calib.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\revrows{calib}
+\else
 True-forward-model loop, from scratch & $23.7$       & $168$      & $2018$     \\
 AI-only (single-shot)                 & $222\pm20$   & ${\sim}2$  & $0$        \\
 Hybrid (AI warm start, true-model polish) & $29.4\pm7.1$ & $23$   & $237\pm46$ \\
+\fi
 \bottomrule
 \end{tabularx}
 \end{table}

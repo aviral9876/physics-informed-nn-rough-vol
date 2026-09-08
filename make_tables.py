@@ -260,6 +260,22 @@ def table_surrogate():
            % (d["n_labelled"], _sha("surrogate")))
 
 
+def table_calib():
+    """Table: three routes to the inverse problem, both parametric boxes. (M3, M6, M-res)"""
+    d = _load("param_boxes")
+    F = d["from_scratch"]
+    rows = [r"True-forward-model loop, from scratch & $%.1f$ & $%.0f$ & $%d$" % (
+                F["rmse_vol_bp"], F["seconds"], F["evals"]) + EOL]
+    for box, lab in (("default", "original box"), ("wide", "widened box")):
+        b = d["per_box"][box]
+        rows.append(r"AI-only (single-shot), %s & $%.0f\pm%.0f$ & ${\sim}2$ & $0$" % (
+            lab, b["ai_only_rmse"]["mean"], b["ai_only_rmse"]["sd"]) + EOL)
+        rows.append(r"Hybrid (AI warm start, true-model polish), %s & $%.1f\pm%.1f$ & $%.0f$ & $%.0f\pm%.0f$" % (
+            lab, b["hybrid_rmse"]["mean"], b["hybrid_rmse"]["sd"], b["hybrid_seconds"],
+            b["hybrid_evals"]["mean"], b["hybrid_evals"]["sd"]) + EOL)
+    _write("calib", rows, "results/param_boxes.json, git " + _sha("param_boxes"))
+
+
 def table_environment():
     """Table T-new4: compute environment. (M7)"""
     d = _load("environment")
@@ -272,7 +288,7 @@ def table_environment():
 
 EMITTERS = [table_nconv, table_mcquality, table_arbitrage,
             table_regime, table_profile, table_risk, table_liquid,
-            table_hparams, table_n32, table_surrogate, table_environment]
+            table_hparams, table_n32, table_surrogate, table_calib, table_environment]
 
 if __name__ == "__main__":
     only = sys.argv[1:]
