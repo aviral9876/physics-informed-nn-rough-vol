@@ -43,13 +43,26 @@ def _write(name, rows, note):
 
 
 def table_nconv():
-    """Table 2: dimension scaling of the forward operator."""
+    """Table 2: dimension scaling of the forward operator.
+
+    Solve- and lift-error from the seed sweep (J1); training time per n from the
+    hparams n-sweep (same width/depth/n_col) when it exists, since the sweep
+    itself does not time its runs.
+    """
     d = _load("n_convergence")
     nseed = len(d["rows"][0].get("solves", [])) or "?"
-    rows = [r"%-3d & $%.1f\pm%.1f$ & $%.1f$ & $%.1e$" % (
-                r_["n"], r_["solve_mean"], r_["solve_std"], r_["lift"],
-                50.0 ** (r_["n"] + 1)) + EOL
-            for r_ in d["rows"]]
+    secs = {}
+    try:
+        secs = {q["n"]: q["train_seconds"] for q in _load("hparams")["n_sweep"]}
+    except (FileNotFoundError, KeyError):
+        pass
+    rows = []
+    for r_ in d["rows"]:
+        t = ("$%.0f$" % secs[r_["n"]]) if r_["n"] in secs else "--"
+        e = "%.1e" % (50.0 ** (r_["n"] + 1))
+        mant, ex = e.split("e")
+        rows.append(r"%-3d & $%.1f\pm%.1f$ & $%.1f$ & %s & $%s\times10^{%d}$" % (
+            r_["n"], r_["solve_mean"], r_["solve_std"], r_["lift"], t, mant, int(ex)) + EOL)
     _write("nconv", rows, "results/n_convergence.json (%s seeds), git %s"
            % (nseed, _sha("n_convergence")))
 

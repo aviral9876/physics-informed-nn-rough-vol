@@ -816,10 +816,16 @@ deterministic.}
 \toprule
 $n$ & solve-error (px\bp) & lift-error (px\bp) & train time (s) & FD grid $50^{(n+1)}$\\
 \midrule
+%% rows come from make_tables.py (results/n_convergence.json) once the 8-seed sweep lands;
+%% the hand-typed 3-seed rows below are the fallback
+\IfFileExists{tables/nconv.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\revrows{nconv}
+\else
 4  & $5.4\pm1.0$  & $16.4$ & $397$ & $3.1\times10^{8}$  \\
 8  & $6.1\pm1.4$  & $7.9$  & $386$ & $2.0\times10^{15}$ \\
 16 & $8.8\pm1.6$  & $3.5$  & $591$ & $7.6\times10^{28}$ \\
 32 & $10.7\pm2.0$ & $1.7$  & $457$ & $1.2\times10^{56}$ \\
+\fi
 \bottomrule
 \end{tabular}
 \end{table}
