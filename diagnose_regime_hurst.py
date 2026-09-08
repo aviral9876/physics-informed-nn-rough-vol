@@ -44,7 +44,12 @@ from scipy.optimize import minimize
 
 from hist_surface import load_panel, surface_for_date, trading_dates
 from calibrate import PARAM_NAMES
-from refit_canonical import WIDE
+from refit_canonical import WIDE as HEADLINE_BOX
+
+# The headline box binds on the 2023 surfaces (the smoke test put theta at 0.449
+# against a 0.45 cap and lam at 2.94-3.00 against 3.0), so the weekly fits get a
+# wider box. H keeps the same range so the two basins mean the same thing.
+WIDE = [(0.02, 0.45), (0.005, 1.0), (0.005, 1.0), (0.05, 6.0), (0.05, 3.0), (-0.95, -0.05)]
 from diagnose_calib_uncertainty import make_losses, NM
 
 PRE = ("2023-01-01", "2023-12-31")
