@@ -142,6 +142,15 @@ def price_european_fourier(S0, K, T, r, params, H,
     shifted = u - 0.5j
     log_phi = _frac_riccati_adams(shifted, T, params, alpha, N)
     phi = np.exp(log_phi)
+    # The shifted CF satisfies |phi(u - i/2)| = |E[S_T^{1/2} e^{iu log S_T}]| <= E[S_T^{1/2}]
+    # <= 1 (martingale + Jensen). Frequencies at which the fractional Riccati
+    # solution has blown up numerically (the |h| cap above) return non-finite
+    # or unphysical values; their true contribution is negligible, since the CF
+    # decays there, so they are zeroed rather than allowed to poison the whole
+    # integral with NaN. Without this, u_max could not be raised past ~100, and
+    # at maturities of a few days u_max = 100 truncates the integral badly.
+    bad = ~np.isfinite(phi) | (np.abs(phi) > 1.0 + 1e-6)
+    phi = np.where(bad, 0.0 + 0.0j, phi)
 
     integ = np.real(np.exp(1j * np.outer(k, u)) * phi[None, :]) / (u ** 2 + 0.25)
     integral = np.trapezoid(integ, u, axis=1)

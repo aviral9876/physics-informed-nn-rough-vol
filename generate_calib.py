@@ -8,7 +8,7 @@ generations with a local Nelder-Mead polish, all 13 maturities, up to
 MAX_PER_MAT points per maturity spread across moneyness (keeps both wings and
 ATM so the skew is constrained, not just the level).
 """
-import json
+import json, os
 import numpy as np
 import pandas as pd
 
@@ -19,6 +19,14 @@ MAX_PER_MAT = 8
 DE_MAXITER = 60
 DE_POPSIZE = 12
 SEED = 1
+
+# Revision controls (environment, so the defaults reproduce the original run):
+#   CALIB_OUT     output file (default calib_real.json)
+#   CALIB_WORKERS DE workers (default 1; >1 uses deferred updating)
+#   CALIB_BOUNDS  "wide" -> refit_canonical.WIDE with the polish confined to it
+OUT = os.environ.get("CALIB_OUT", "calib_real.json")
+WORKERS = int(os.environ.get("CALIB_WORKERS", "1"))
+BOUNDS_MODE = os.environ.get("CALIB_BOUNDS", "default")
 
 
 def cap_points_per_maturity(surf, max_per_mat=MAX_PER_MAT):
@@ -45,8 +53,12 @@ if __name__ == "__main__":
     for T, g in surf.groupby("T"):
         print(f"   T={T:.4f}  n={len(g):2d}")
 
+    bounds = None
+    if BOUNDS_MODE == "wide":
+        from refit_canonical import WIDE as bounds
     params, diag = calibrate(surf, r=0.0, maxiter=DE_MAXITER, popsize=DE_POPSIZE,
-                             seed=SEED, polish=True, verbose=True)
+                             seed=SEED, polish=True, verbose=True, workers=WORKERS,
+                             bounds=bounds, bounded_polish=(BOUNDS_MODE == "wide"))
     out = {**params,
            "r": 0.0,
            "calib_rmse_vol_bp": diag["rmse_vol_bp"],
@@ -55,8 +67,12 @@ if __name__ == "__main__":
            "max_points_per_maturity": MAX_PER_MAT,
            "de_maxiter": DE_MAXITER,
            "de_popsize": DE_POPSIZE,
+           "bounded_polish": bool(diag["bounded_polish"]),
+           "bounds": diag["bounds"],
+           "workers": WORKERS,
+           "objective": "vega-weighted IV RMSE, all points, IV floor for worthless prices, adaptive u_max",
            "spot": float(surf["spot"].iloc[0]),
            "maturities": sorted(surf["T"].round(6).unique().tolist())}
-    json.dump(out, open("calib_real.json", "w"), indent=2)
-    print("saved -> calib_real.json")
+    json.dump(out, open(OUT, "w"), indent=2)
+    print("saved -> " + OUT)
     print(json.dumps(out, indent=2))

@@ -51,11 +51,10 @@ def make_losses(surf, r=0.0):
 
     def both(vec):
         model = _model_ivs(np.asarray(vec, float), surf, r)
-        m = np.isfinite(model)
-        if m.sum() < 0.5 * len(surf):
-            return 1e3, 1e3
-        err = model[m] - mkt[m]
-        weighted = np.sqrt(np.sum(wn[m] * err ** 2) / wn[m].sum())
+        if not np.all(np.isfinite(model)):
+            return 1e3, 1e3               # pricer failure: infeasible, never masked
+        err = model - mkt
+        weighted = np.sqrt(np.sum(wn * err ** 2))
         unweighted = np.sqrt(np.mean(err ** 2))
         return float(weighted), float(unweighted)
     return both
