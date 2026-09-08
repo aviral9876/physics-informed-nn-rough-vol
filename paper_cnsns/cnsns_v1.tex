@@ -855,6 +855,59 @@ artefact.}
 \label{fig:calib}
 \end{figure}
 
+\subsection{Is the recovered roughness real, and is it stable?}
+\label{sec:roughness_robustness}
+The claim that Bitcoin is genuinely rough rests, so far, on one option surface
+read through a six-parameter inverse problem. Two things could undermine it. The
+inverse problem might not identify $H$ sharply, in which case $H{=}0.090$ would
+be one point on a flat ridge rather than a measurement; and even if it does, a
+single snapshot says nothing about whether the roughness is a stable feature of
+the market or an artefact of one day's regime. We test both, the second using an
+estimator that never touches an option price.
+
+\paragraph{An estimate that does not use the option surface.}
+Following \citet{gatheral2018volatility}, we estimate $H$ directly from realised
+volatility. From five-minute log returns of the Deribit BTC perpetual we build
+daily realised variance, set $\sigma_t=\sqrt{RV_t}$, and form the $q$-th absolute
+moment of log-volatility increments at lag $\Delta$,
+$m(q,\Delta)=\mathbb{E}\bigl|\log\sigma_{t+\Delta}-\log\sigma_t\bigr|^{q}$. For a
+fractional process $m(q,\Delta)\sim\Delta^{qH}$, so regressing $\log m$ on
+$\log\Delta$ for each $q$ gives slopes $\zeta(q)$, and regressing $\zeta$ on $q$
+through the origin gives $H$. Over $2\,921$ days (August 2018 to August 2026,
+$841$k bars) this returns
+\[
+  H_{\mathbb{P}} = 0.111, \qquad \text{95\% CI } [0.102,\,0.150],
+\]
+with the interval from a $60$-day moving-block bootstrap. This is an independent
+corroboration in the strongest available sense: it uses no option data, no
+Markovian lift, no Fourier pricer and no optimiser, and it lands close to the
+option-implied $H{=}0.090$. It also agrees with \citet{takaishi2020rough}, who
+reports rough volatility for Bitcoin over an earlier and disjoint sample.
+
+We report the block-bootstrap interval rather than the regression's own standard
+error deliberately. The analytic standard error propagates only the scatter of
+the five $\zeta(q)$ about the fitted line; it ignores the sampling error inside
+each moment and the strong persistence of log-volatility, and on our data it is
+roughly an order of magnitude too small---it returns $2\times10^{-4}$ for a
+window whose neighbouring window sits $0.02$ away. Any inference drawn from it
+would be spurious.
+
+\paragraph{Stability across the spot-ETF approval.}
+The referee's regime question has a natural event: the approval of US spot
+Bitcoin ETFs on 11 January 2024. We split the realised-volatility series into
+calendar 2023 (pre) and February--December 2024 (post), excluding January 2024
+entirely as the event window rather than assigning it to either regime, and
+re-estimate:
+\[
+  H_{\mathbb{P}}^{\text{pre}} = 0.064\ [0.018,\,0.098], \qquad
+  H_{\mathbb{P}}^{\text{post}} = 0.062\ [0.022,\,0.079],
+\]
+a difference of $+0.002$ against a combined bootstrap standard error of $0.025$
+($z=0.10$). The roughness of Bitcoin volatility is unchanged by the ETF
+approval. One caveat belongs with these numbers: this estimator is biased low on
+short windows, so the two one-year windows are comparable with each other but not
+with the full-sample figure above, and we compare only the former.
+
 \subsection{A parametric AI forward operator inside the inverse problem}
 \label{sec:parametric}
 A single network cannot cover both the breadth of a parameter box and the
