@@ -72,7 +72,12 @@ def profile(surf, idx, grid, start, both):
         t0 = time.time()
         res = minimize(obj, np.array(start, float)[free], method="Nelder-Mead",
                        bounds=list(zip(lo, hi)), options=NM)
-        v = np.array(start, float); v[idx] = g; v[free] = res.x
+        # obj() clips into the box before evaluating, so the loss NM minimised is
+        # the loss at the CLIPPED point. Re-evaluating at the raw res.x would
+        # report a different (and possibly worse) number than the optimiser found
+        # -- which is exactly what happened on the first run, where the profile at
+        # the canonical H came out above the canonical loss itself.
+        v = np.array(start, float); v[idx] = g; v[free] = np.clip(res.x, lo, hi)
         wl, ul = both(v)
         out.append(dict(fixed=float(g), weighted=wl, unweighted_vol_bp=1e4 * ul,
                         params={k: float(x) for k, x in zip(PARAM_NAMES, v)},
