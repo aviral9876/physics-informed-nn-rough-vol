@@ -86,9 +86,11 @@ independently; used as a differentiable warm start for a short local refinement
 against the true (Fourier) forward model, it recovers full calibration quality
 at approximately nine times fewer expensive forward-model evaluations. All
 experiments calibrate to live Bitcoin option data from the Deribit exchange,
-recovering a genuinely rough Hurst exponent ($H\approx0.09$) with strong negative
-correlation ($\rho\approx-0.79$). We report the fit quality plainly: the
-vega-weighted implied-vol RMSE is $496$ vol\bp{}, which is coarse. That
+recovering a rough Hurst exponent ($H\approx0.09$ at the canonical fit, though
+Section~\ref{sec:roughness_robustness} shows the surface supports a range of
+$H$) with strong negative correlation ($\rho\approx-0.79$). We report the fit
+quality plainly: the unweighted implied-vol RMSE is $496$ vol\bp{} ($174$
+vol\bp{} vega-weighted), which is coarse. That
 coarseness measures the lifted rough-Heston forward model's expressiveness on
 wide, richly curved crypto smiles---the filtered surface is free of static
 arbitrage, so it is not a data artefact---and is orthogonal to the neural
@@ -697,7 +699,7 @@ We compare three ways of solving the same calibration inverse problem.
         model then sharpens it.
 \end{enumerate}
 
-\paragraph{Optimiser settings, stated once.}
+\paragraph{Optimiser settings, stated once.}\label{par:optimiser}
 Two distinct budgets appear in this paper and conflating them would misstate the
 speed-up, so we separate them explicitly. The \emph{full-budget market
 calibration} of Section~\ref{sec:btc} uses SciPy's \texttt{differential\_evolution}
@@ -834,9 +836,13 @@ returns
   H{=}0.090,\quad \rho{=}{-}0.792,\quad V_0{=}0.103,\quad
   \theta{=}0.253,\quad \lambda{=}2.567,\quad \nu{=}0.300,
 \end{equation*}
-at a vega-weighted implied-vol RMSE of 496 vol\bp{} (Figure~\ref{fig:calib}). The
-Hurst exponent is firmly rough and the correlation strongly negative---the
-signature of a crypto market with a steep, persistent left skew. We do not dress
+at an implied-vol RMSE of 496 vol\bp{} unweighted, 174 vol\bp{} under the
+vega weights the objective actually uses (Figure~\ref{fig:calib}). The Hurst
+exponent is rough and the correlation strongly negative---the signature of a
+crypto market with a steep, persistent left skew---but we show in
+Section~\ref{sec:roughness_robustness} that this surface does not pin $H$
+sharply, so the point value should be read together with the interval given
+there. We do not dress
 up the inverse-problem fit quality: at 496 vol\bp{} it is coarse, and the
 per-maturity smiles in Figure~\ref{fig:calib}(b) show where the model strains.
 That coarseness is a statement about the forward model's expressiveness on wide,
@@ -865,8 +871,34 @@ single snapshot says nothing about whether the roughness is a stable feature of
 the market or an artefact of one day's regime. We test both, the second using an
 estimator that never touches an option price.
 
+\paragraph{Does the surface identify $H$?}
+Not sharply. Two experiments say so. First, while sizing the regime study we
+ran the calibration on the headline snapshot with the light optimiser budget of
+the paragraph on optimiser settings in Section~\ref{sec:calib} (10 generations, population 8): it returned
+$H=0.174$ against the full-budget $0.090$, at essentially the same unweighted
+fit ($495$ versus $496$ vol bp). Second, we repeated the full-budget fit with
+every bound widened---$H\in[0.02,0.45]$, $V_0,\theta\in[0.005,0.45]$,
+$\lambda\in[0.05,3]$, $\nu\in[0.05,2]$, $\rho\in[-0.95,-0.05]$---and a bounded
+polish. It converged to
+\[
+  H=0.251,\;\; \nu=0.594,\;\; \rho=-0.650,\;\;
+  \lambda=2.96,\;\; V_0=0.115,\;\; \theta=0.256
+\]
+at $486$ vol bp: ten basis points, or two per cent, better than the canonical
+fit, for a Hurst exponent nearly three times larger. The loss surface has a long,
+nearly flat ridge in $H$ along which $\nu$ and $\rho$ compensate---a rougher
+kernel with a smaller vol-of-vol and a stronger skew prices this surface about
+as well as a smoother kernel with a larger vol-of-vol and a milder skew.
+%% PROFILE: insert the profile-likelihood interval sentence here once
+%% results/calib_uncertainty.json lands (diagnose_calib_uncertainty.py).
+We therefore do three things. We report the option-implied $H$ as an interval
+rather than a point; we keep the canonical $H=0.090$ fit as the working point
+for every PINN experiment, because it is the stiffer and therefore harder case
+for the solver (Section~\ref{sec:problem}); and we lean on the estimate
+below, which never passes through this inverse problem at all.
+
 \paragraph{An estimate that does not use the option surface.}
-Following \citet{gatheral2018volatility}, we estimate $H$ directly from realised
+Following Gatheral, Jaisson and Rosenbaum~\citep{gatheral2018volatility}, we estimate $H$ directly from realised
 volatility. From five-minute log returns of the Deribit BTC perpetual we build
 daily realised variance, set $\sigma_t=\sqrt{RV_t}$, and form the $q$-th absolute
 moment of log-volatility increments at lag $\Delta$,
@@ -881,7 +913,7 @@ $841$k bars) this returns
 with the interval from a $60$-day moving-block bootstrap. This is an independent
 corroboration in the strongest available sense: it uses no option data, no
 Markovian lift, no Fourier pricer and no optimiser, and it lands close to the
-option-implied $H{=}0.090$. It also agrees with \citet{takaishi2020rough}, who
+option-implied $H{=}0.090$. It also agrees with Takaishi~\citep{takaishi2020rough}, who
 reports rough volatility for Bitcoin over an earlier and disjoint sample.
 
 We report the block-bootstrap interval rather than the regression's own standard
