@@ -1,7 +1,7 @@
 {
   "name": "arbitrage",
-  "written_utc": "2026-09-06T04:04:42+00:00",
-  "git_sha": "6bdd289",
+  "written_utc": "2026-09-09T07:42:27+00:00",
+  "git_sha": "8d3883a",
   "git_dirty": true,
   "python": "3.12.10",
   "platform": "Windows-11-10.0.26200-SP0",
@@ -43,22 +43,22 @@
     },
     "model": {
       "butterfly": {
-        "n_tested": 71,
+        "n_tested": 78,
         "n_violations": 0,
-        "worst_px_bp": 0.9761646404733568,
+        "worst_px_bp": 1.35886077409023,
         "violations": []
       },
       "vertical": {
-        "n_tested": 84,
+        "n_tested": 91,
         "n_violations": 0,
-        "max_slope": -0.00044346605804860835,
-        "min_slope_plus_one": 2.926969433125759e-05,
+        "max_slope": -0.0015771373080848393,
+        "min_slope_plus_one": 0.004721859014139573,
         "violations": []
       },
       "calendar": {
         "n_tested": 300,
         "n_violations": 0,
-        "worst_dw": 0.00015798425874802692,
+        "worst_dw": 0.00021193081277345947,
         "violations": []
       }
     },
@@ -92,19 +92,48 @@
       }
     },
     "calibrated_params": {
-      "H": 0.08986471921353176,
-      "V0": 0.10347744703885647,
-      "theta": 0.252522966988623,
-      "lam": 2.5666934818916634,
-      "nu": 0.2997684379403064,
-      "rho": -0.7919808469999094,
+      "H": 0.1724331515737093,
+      "V0": 0.10479702213083347,
+      "theta": 0.24532279892660525,
+      "lam": 4.943025432626069,
+      "nu": 1.3694314251316104,
+      "rho": -0.42590960291971847,
       "r": 0.0,
-      "calib_rmse_vol_bp": 496.4253312936949,
-      "n_points": 97,
+      "calib_rmse_vol_bp": 416.4392527340109,
+      "n_points": 104,
       "n_maturities": 13,
       "max_points_per_maturity": 8,
       "de_maxiter": 60,
       "de_popsize": 12,
+      "bounded_polish": true,
+      "bounds": [
+        [
+          0.02,
+          0.45
+        ],
+        [
+          0.005,
+          0.6
+        ],
+        [
+          0.005,
+          0.6
+        ],
+        [
+          0.05,
+          12.0
+        ],
+        [
+          0.05,
+          2.0
+        ],
+        [
+          -0.95,
+          -0.05
+        ]
+      ],
+      "workers": 6,
+      "objective": "vega-weighted IV RMSE, all points, IV floor for worthless prices, adaptive u_max",
       "spot": 62059.19,
       "maturities": [
         0.002059,
@@ -120,6 +149,69 @@
         0.478772,
         0.728087,
         0.977402
+      ],
+      "reference_of": "calib_real_wider.json",
+      "reference_label": "corrected, wider box",
+      "weighted_vol_bp": 113.21431862154532,
+      "unweighted_vol_bp": 416.4392527340109,
+      "note": "chosen by select_reference.py on the corrected objective; calib_real.json is left as the submitted record",
+      "all_candidates": [
+        {
+          "label": "submitted",
+          "path": "calib_real.json",
+          "weighted_vol_bp": 204.22351128391233,
+          "unweighted_vol_bp": 970.5435051521443,
+          "params": {
+            "H": 0.08986471921353176,
+            "V0": 0.10347744703885647,
+            "theta": 0.252522966988623,
+            "lam": 2.5666934818916634,
+            "nu": 0.2997684379403064,
+            "rho": -0.7919808469999094
+          }
+        },
+        {
+          "label": "corrected, original box",
+          "path": "calib_real_fixed.json",
+          "weighted_vol_bp": 114.88667938474524,
+          "unweighted_vol_bp": 453.69491608238746,
+          "params": {
+            "H": 0.019216369434561738,
+            "V0": 0.10625214614107742,
+            "theta": 0.2860212203370759,
+            "lam": 2.063306937830295,
+            "nu": 0.7455665205344341,
+            "rho": -0.4194396827219852
+          }
+        },
+        {
+          "label": "corrected, wide box",
+          "path": "calib_real_wide_fixed.json",
+          "weighted_vol_bp": 113.73439677373199,
+          "unweighted_vol_bp": 430.24189487181854,
+          "params": {
+            "H": 0.09567540506195205,
+            "V0": 0.10709524243009222,
+            "theta": 0.2657267631425867,
+            "lam": 2.99998371460906,
+            "nu": 0.9771172586420649,
+            "rho": -0.4210932381608884
+          }
+        },
+        {
+          "label": "corrected, wider box",
+          "path": "calib_real_wider.json",
+          "weighted_vol_bp": 113.21431862154532,
+          "unweighted_vol_bp": 416.4392527340109,
+          "params": {
+            "H": 0.1724331515737093,
+            "V0": 0.10479702213083347,
+            "theta": 0.24532279892660525,
+            "lam": 4.943025432626069,
+            "nu": 1.3694314251316104,
+            "rho": -0.42590960291971847
+          }
+        }
       ]
     }
   }

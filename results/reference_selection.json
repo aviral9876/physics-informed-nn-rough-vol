@@ -1,0 +1,87 @@
+{
+  "name": "reference_selection",
+  "written_utc": "2026-09-09T04:39:57+00:00",
+  "git_sha": "8d3883a",
+  "git_dirty": true,
+  "python": "3.12.10",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "argv": [
+    "select_reference.py"
+  ],
+  "payload": {
+    "candidates": [
+      {
+        "label": "submitted",
+        "path": "calib_real.json",
+        "weighted_vol_bp": 204.22351128391233,
+        "unweighted_vol_bp": 970.5435051521443,
+        "params": {
+          "H": 0.08986471921353176,
+          "V0": 0.10347744703885647,
+          "theta": 0.252522966988623,
+          "lam": 2.5666934818916634,
+          "nu": 0.2997684379403064,
+          "rho": -0.7919808469999094
+        }
+      },
+      {
+        "label": "corrected, original box",
+        "path": "calib_real_fixed.json",
+        "weighted_vol_bp": 114.88667938474524,
+        "unweighted_vol_bp": 453.69491608238746,
+        "params": {
+          "H": 0.019216369434561738,
+          "V0": 0.10625214614107742,
+          "theta": 0.2860212203370759,
+          "lam": 2.063306937830295,
+          "nu": 0.7455665205344341,
+          "rho": -0.4194396827219852
+        }
+      },
+      {
+        "label": "corrected, wide box",
+        "path": "calib_real_wide_fixed.json",
+        "weighted_vol_bp": 113.73439677373199,
+        "unweighted_vol_bp": 430.24189487181854,
+        "params": {
+          "H": 0.09567540506195205,
+          "V0": 0.10709524243009222,
+          "theta": 0.2657267631425867,
+          "lam": 2.99998371460906,
+          "nu": 0.9771172586420649,
+          "rho": -0.4210932381608884
+        }
+      },
+      {
+        "label": "corrected, wider box",
+        "path": "calib_real_wider.json",
+        "weighted_vol_bp": 113.21431862154532,
+        "unweighted_vol_bp": 416.4392527340109,
+        "params": {
+          "H": 0.1724331515737093,
+          "V0": 0.10479702213083347,
+          "theta": 0.24532279892660525,
+          "lam": 4.943025432626069,
+          "nu": 1.3694314251316104,
+          "rho": -0.42590960291971847
+        }
+      }
+    ],
+    "chosen": {
+      "label": "corrected, wider box",
+      "path": "calib_real_wider.json",
+      "weighted_vol_bp": 113.21431862154532,
+      "unweighted_vol_bp": 416.4392527340109,
+      "params": {
+        "H": 0.1724331515737093,
+        "V0": 0.10479702213083347,
+        "theta": 0.24532279892660525,
+        "lam": 4.943025432626069,
+        "nu": 1.3694314251316104,
+        "rho": -0.42590960291971847
+      }
+    },
+    "n_points": 104,
+    "swapped": true
+  }
+}

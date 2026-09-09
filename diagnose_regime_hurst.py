@@ -46,10 +46,16 @@ from hist_surface import load_panel, surface_for_date, trading_dates
 from calibrate import PARAM_NAMES
 from refit_canonical import WIDE as HEADLINE_BOX
 
-# The headline box binds on the 2023 surfaces (the smoke test put theta at 0.449
-# against a 0.45 cap and lam at 2.94-3.00 against 3.0), so the weekly fits get a
-# wider box. H keeps the same range so the two basins mean the same thing.
-WIDE = [(0.02, 0.45), (0.005, 1.0), (0.005, 1.0), (0.05, 6.0), (0.05, 3.0), (-0.95, -0.05)]
+# The headline box binds on these surfaces, so the weekly fits get a wider one.
+# The first full pass (86 weeks, 2026-09-09) showed rho CENSORED: 27% of weekly
+# fits sat exactly on the -0.05 cap and none went below -0.250, i.e. the
+# trade-tape surfaces want a correlation near zero and the box would not let
+# them have it. Since rho is the parameter this surface actually identifies
+# (the profile pins it to -0.45 on the headline snapshot while H is only
+# bounded to [0.04, 0.18]), censoring it would destroy the one meaningful
+# pre/post test. rho is therefore allowed to cross zero. H keeps its range so
+# the two basins mean the same thing.
+WIDE = [(0.02, 0.45), (0.005, 1.0), (0.005, 1.0), (0.05, 8.0), (0.05, 3.0), (-0.95, 0.50)]
 from diagnose_calib_uncertainty import make_losses, NM
 
 PRE = ("2023-01-01", "2023-12-31")
