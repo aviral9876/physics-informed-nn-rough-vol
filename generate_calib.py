@@ -56,9 +56,11 @@ if __name__ == "__main__":
     bounds = None
     if BOUNDS_MODE == "wide":
         from refit_canonical import WIDE as bounds
+    elif BOUNDS_MODE == "wider":
+        from refit_canonical import WIDER as bounds
     params, diag = calibrate(surf, r=0.0, maxiter=DE_MAXITER, popsize=DE_POPSIZE,
                              seed=SEED, polish=True, verbose=True, workers=WORKERS,
-                             bounds=bounds, bounded_polish=(BOUNDS_MODE == "wide"))
+                             bounds=bounds, bounded_polish=(BOUNDS_MODE in ("wide", "wider")))
     out = {**params,
            "r": 0.0,
            "calib_rmse_vol_bp": diag["rmse_vol_bp"],

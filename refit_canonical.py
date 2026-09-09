@@ -76,3 +76,8 @@ if __name__ == "__main__":
                                 deltas={k: float(params[k] - old[k])
                                         for k in ["H","V0","theta","lam","nu","rho"]}))
     print("\nsaved -> calib_real_wide.json  (calib_real.json untouched)")
+
+# The corrected-objective fit pinned lambda at the WIDE box's upper bound of 3.0
+# (2026-09-09), so the box was constraining the answer rather than containing it.
+# WIDER raises lambda and theta; every other edge stayed interior.
+WIDER = [(0.02, 0.45), (0.005, 0.60), (0.005, 0.60), (0.05, 12.0), (0.05, 2.0), (-0.95, -0.05)]
