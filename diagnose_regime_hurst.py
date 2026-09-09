@@ -152,8 +152,28 @@ if __name__ == "__main__":
           f"{sum(r=='post' for r,_ in jobs)} post) x {len(starts)} starts on {nproc} workers", flush=True)
 
     os.makedirs("results", exist_ok=True)
-    open(CKPT, "w").close()
-    rows, t0 = [], time.time()
+    # Resume: this job has been killed twice by a Modern Standby resume tearing
+    # down the console window station, each time at 50-86 of 99 weeks. Every week
+    # is independent, so previously completed dates are reloaded and skipped.
+    # Set REGIME_FRESH=1 to force a clean run.
+    rows = []
+    if os.environ.get("REGIME_FRESH") == "1":
+        open(CKPT, "w").close()
+    elif os.path.exists(CKPT):
+        for line in open(CKPT):
+            line = line.strip()
+            if line:
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    pass                       # a torn final line from a kill
+        if rows:
+            print("resuming: %d weeks already in %s" % (len(rows), CKPT), flush=True)
+    seen = {r["date"] for r in rows}
+    todo = [(reg, j) for reg, j in jobs if str(j[0]) not in seen]
+    print("[regime] %d of %d weeks still to do" % (len(todo), len(jobs)), flush=True)
+    jobs = todo
+    t0 = time.time()
     with Pool(nproc) as pool:
         for (regime, _), res in zip(jobs, pool.imap(fit_one, [j for _, j in jobs])):
             res["regime"] = regime
