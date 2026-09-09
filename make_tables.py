@@ -129,18 +129,23 @@ def table_regime():
     """
     d = _load("regime_hurst")
     s = d["summary"]
-    labels = [("H_canonical", r"$H$, canonical start"), ("H_wide", r"$H$, wide-box start"),
-              ("rho_canonical", r"$\rho$"), ("nu_canonical", r"$\nu$"),
-              ("fit_canonical", r"weighted fit (vol\,bp)"),
-              ("basin", r"loss(wide) $-$ loss(canonical) (vol\,bp)")]
+    # dp: parameters to 3 decimals, vol-bp quantities to 1 -- three decimals on a
+    # basis-point figure both overflows the column and implies precision we do
+    # not have (the weekly SDs are 45-84 vol bp).
+    labels = [("H_canonical", r"$H$ (canon.\ start)", 3), ("H_wide", r"$H$ (wide start)", 3),
+              ("rho_canonical", r"$\rho$", 3), ("nu_canonical", r"$\nu$", 3),
+              ("fit_canonical", r"fit (vol\,bp)", 1),
+              ("basin", r"basin gap (vol\,bp)", 1)]
     rows = []
-    for key, lab in labels:
+    for key, lab, dp in labels:
         c = s.get(key)
         if not c:
             continue
-        rows.append(r"%s & $%.3f\pm%.3f$ & $%.3f\pm%.3f$ & $%+.3f$ & $[%+.3f, %+.3f]$ & %.3f" % (
-            lab, c["pre_mean"], c["pre_sd"], c["post_mean"], c["post_sd"], c["diff"],
-            c["boot_ci95"][0], c["boot_ci95"][1], c["welch_p"]) + EOL)
+        f = "%%.%df" % dp
+        fmt = ("%s & $" + f + r"\pm" + f + "$ & $" + f + r"\pm" + f
+               + "$ & $%+" + f[1:] + "$ & $[%+" + f[1:] + ", %+" + f[1:] + "]$ & %.3f")
+        rows.append(fmt % (lab, c["pre_mean"], c["pre_sd"], c["post_mean"], c["post_sd"],
+                           c["diff"], c["boot_ci95"][0], c["boot_ci95"][1], c["welch_p"]) + EOL)
     if not rows:
         raise KeyError("summary")
     b = s.get("basin")
@@ -163,11 +168,11 @@ def table_profile():
         rows.append(r"$%.3f$ & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
             p["fixed"], 1e4 * p["weighted"], p["unweighted_vol_bp"],
             q["nu"], q["rho"], q["lam"]) + EOL)
+    # A footnote row wider than the columns stretches the whole tabular and pushes
+    # the last column into the margin, so keep it short and put detail in the caption.
     rows.append(r"\midrule")
-    rows.append(r"\multicolumn{6}{@{}l}{Canonical fit: $H=%.3f$, weighted %.1f, unweighted %.1f vol\,bp; "
-                r"5\%% interval $H\in[%.3f, %.3f]$.}" % (
-                    c["params"]["H"], c["weighted_vol_bp"], c["unweighted_vol_bp"],
-                    d["interval_H"][0], d["interval_H"][1]) + EOL)
+    rows.append(r"\multicolumn{6}{@{}l}{Best $H=%.3f$; 5\%% interval $[%.3f, %.3f]$.}" % (
+        c["params"]["H"], d["interval_H"][0], d["interval_H"][1]) + EOL)
     _write("profile", rows, "results/calib_uncertainty.json, git " + _sha("calib_uncertainty"))
 
 
@@ -249,8 +254,7 @@ def table_surrogate():
     s = d["summary"]
     # columns: Operator & Offline cost & Exact pricer offline? & vs Fourier & vs lifted MC
     #          & Solve/lift split & Differentiable   (see tab:operators in the manuscript)
-    rows = [r"Supervised surrogate (MLP $5\to4\times30\to21$) & %.0f min labels $+$ %.0f s "
-            r"training & yes & $%.1f\pm%.1f$ & -- & no & yes" % (
+    rows = [r"Supervised surrogate (MLP) & %.0f min $+$ %.0f s & yes & $%.1f\pm%.1f$ & -- & no & yes" % (
                 d["label_seconds"] / 60, s["train_seconds_mean"], s["test_rmse_mean"],
                 s["test_rmse_sd"]) + EOL,
             r"\multicolumn{7}{@{}l}{\quad in the rough / high-$\nu$ corner: "

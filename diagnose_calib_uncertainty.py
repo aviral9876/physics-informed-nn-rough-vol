@@ -35,7 +35,12 @@ from scipy.optimize import minimize
 from surface import build_surface
 from generate_calib import cap_points_per_maturity
 from calibrate import _model_ivs, PARAM_NAMES
-from refit_canonical import WIDE
+from refit_canonical import WIDER as WIDE   # see note below
+# The first profile ran inside the WIDE box and lambda sat on its 3.0 cap in
+# ten of twelve H rows -- i.e. the box, not the data, was setting lambda, and
+# every profile value was inflated by that censoring. WIDER raises the cap to
+# 12; freeing lambda can only lower the re-optimised loss, so the H interval
+# reported from the censored run was, if anything, too narrow.
 
 # The first run was still falling at H=0.22, so the grid now runs to the edge of
 # the wide box (0.45) to find where the profile actually turns.

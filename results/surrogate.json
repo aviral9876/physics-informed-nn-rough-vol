@@ -1,7 +1,7 @@
 {
   "name": "surrogate",
-  "written_utc": "2026-09-08T13:17:47+00:00",
-  "git_sha": "465041a",
+  "written_utc": "2026-09-09T15:53:40+00:00",
+  "git_sha": "c047c8c",
   "git_dirty": true,
   "python": "3.12.10",
   "platform": "Windows-11-10.0.26200-SP0",
@@ -46,7 +46,7 @@
       "split": "by parameter vector, 75/12.5/12.5"
     },
     "n_labelled": 64353,
-    "label_seconds": 4277.05607509613,
+    "label_seconds": 4275.859311342239,
     "runs": [
       {
         "test_rmse_vol_bp": 5.53273589287062,
@@ -56,7 +56,7 @@
         "n_val": 8044,
         "n_test": 8044,
         "epochs_run": 200,
-        "train_seconds": 71.59981417655945,
+        "train_seconds": 27.65954041481018,
         "hidden": 30,
         "depth": 4,
         "seed": 0,
@@ -92,7 +92,7 @@
         "n_val": 8044,
         "n_test": 8044,
         "epochs_run": 182,
-        "train_seconds": 48.76202344894409,
+        "train_seconds": 23.497865438461304,
         "hidden": 30,
         "depth": 4,
         "seed": 1,
@@ -128,7 +128,7 @@
         "n_val": 8044,
         "n_test": 8044,
         "epochs_run": 196,
-        "train_seconds": 53.026177406311035,
+        "train_seconds": 25.52458143234253,
         "hidden": 30,
         "depth": 4,
         "seed": 2,
@@ -162,7 +162,7 @@
       "test_rmse_sd": 0.1465991095879322,
       "corner_rmse_mean": 9.260113629031801,
       "corner_rmse_sd": 0.9763273405424,
-      "train_seconds_mean": 57.79600501060486
+      "train_seconds_mean": 25.560662428538006
     }
   }
 }
