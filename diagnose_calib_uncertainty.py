@@ -29,6 +29,7 @@ something the manuscript now discloses.
 """
 import json, os, time
 import numpy as np, pandas as pd
+from multiprocessing import Pool
 from scipy.optimize import minimize
 
 from surface import build_surface
@@ -60,47 +61,70 @@ def make_losses(surf, r=0.0):
     return both
 
 
-def profile(surf, idx, grid, starts, both):
-    """Fix parameter `idx` at each grid value; re-optimise the other five.
+def _profile_task(args):
+    """One (fixed value, warm start) Nelder-Mead re-optimisation.
 
-    `starts` is a list of warm-start vectors. Nelder-Mead is local, and the loss
-    surface has (at least) two basins -- the canonical H~0.09 fit and the wide-box
-    H~0.25 fit -- so a single start from the canonical point would report a
-    spuriously high profile at large H. We run from every start and keep the
-    best, which is what a profile likelihood is supposed to be.
+    Module-level and self-contained so it pickles to Pool workers on Windows;
+    each worker rebuilds the loss from the surface records it is handed.
     """
+    idx, g, start, surf_records, r = args
+    surf = pd.DataFrame(surf_records)
+    both = make_losses(surf, r)
     free = [i for i in range(6) if i != idx]
     lo = np.array([WIDE[i][0] for i in free]); hi = np.array([WIDE[i][1] for i in free])
-    out = []
-    for g in grid:
-        def obj(free_vec):
-            v = np.array(start, float)
-            v[idx] = g
-            v[free] = np.clip(free_vec, lo, hi)
-            return both(v)[0]
-        t0 = time.time()
-        best_v, best_w = None, np.inf
-        for start in starts:
-            res = minimize(obj, np.array(start, float)[free], method="Nelder-Mead",
-                           bounds=list(zip(lo, hi)), options=NM)
-            # obj() clips into the box before evaluating, so the loss NM minimised is
-            # the loss at the CLIPPED point. Re-evaluating at the raw res.x would
-            # report a different (and possibly worse) number than the optimiser found
-            # -- which is exactly what happened on the first run, where the profile at
-            # the canonical H came out above the canonical loss itself.
-            v = np.array(start, float); v[idx] = g; v[free] = np.clip(res.x, lo, hi)
-            wv = both(v)[0]
-            if wv < best_w:
-                best_v, best_w = v, wv
-        v = best_v
-        wl, ul = both(v)
-        out.append(dict(fixed=float(g), weighted=wl, unweighted_vol_bp=1e4 * ul,
-                        params={k: float(x) for k, x in zip(PARAM_NAMES, v)},
-                        secs=time.time() - t0))
-        print(f"    {PARAM_NAMES[idx]}={g:+.3f}  weighted={1e4*wl:7.1f}  "
-              f"unweighted={1e4*ul:7.1f} vol bp  ({time.time()-t0:.0f}s)", flush=True)
-        with open(CKPT, "a") as f:
-            f.write(json.dumps(dict(param=PARAM_NAMES[idx], **out[-1])) + "\n")
+
+    def obj(free_vec):
+        v = np.array(start, float)
+        v[idx] = g
+        v[free] = np.clip(free_vec, lo, hi)
+        return both(v)[0]
+
+    t0 = time.time()
+    res = minimize(obj, np.array(start, float)[free], method="Nelder-Mead",
+                   bounds=list(zip(lo, hi)), options=NM)
+    # obj() clips into the box before evaluating, so the loss NM minimised is the
+    # loss at the CLIPPED point. Re-evaluating at the raw res.x would report a
+    # different (and possibly worse) number than the optimiser found -- which is
+    # exactly what happened on the first run, where the profile at the canonical
+    # H came out above the canonical loss itself.
+    v = np.array(start, float); v[idx] = g; v[free] = np.clip(res.x, lo, hi)
+    wl, ul = both(v)
+    return dict(idx=idx, fixed=float(g), weighted=wl, unweighted_vol_bp=1e4 * ul,
+                params={k: float(x) for k, x in zip(PARAM_NAMES, v)},
+                nfev=int(res.nfev), secs=time.time() - t0)
+
+
+def profile_parallel(surf, jobs, starts, r=0.0, workers=6):
+    """Profile several parameters at once, one task per (grid point, warm start).
+
+    Every task is independent, so the whole grid runs in parallel rather than the
+    ~20 h a serial sweep costs at ~8 s per objective evaluation. Each completed
+    task is checkpointed as it lands; for each (parameter, grid value) the best
+    result over the warm starts is kept, which is what a profile likelihood is.
+
+    jobs: list of (parameter index, grid) pairs.
+    """
+    recs = surf.to_dict("records")
+    tasks = [(idx, g, st, recs, r) for idx, grid in jobs for g in grid for st in starts]
+    npts = sum(len(gr) for _, gr in jobs)
+    print("  profile: %d tasks (%d grid points x %d starts) on %d workers"
+          % (len(tasks), npts, len(starts), workers), flush=True)
+    best, done = {}, 0
+    with Pool(workers) as pool:
+        for res in pool.imap_unordered(_profile_task, tasks):
+            done += 1
+            key = (res["idx"], res["fixed"])
+            if key not in best or res["weighted"] < best[key]["weighted"]:
+                best[key] = res
+            with open(CKPT, "a") as fh:
+                fh.write(json.dumps(dict(param=PARAM_NAMES[res["idx"]], **res)) + "\n")
+            print("    [%d/%d] %s=%+.3f  weighted=%7.1f  unweighted=%7.1f vol bp  (%d evals, %.0fs)"
+                  % (done, len(tasks), PARAM_NAMES[res["idx"]], res["fixed"],
+                     1e4 * res["weighted"], res["unweighted_vol_bp"], res["nfev"], res["secs"]),
+                  flush=True)
+    out = {}
+    for idx, grid in jobs:
+        out[idx] = [best[(idx, float(g))] for g in grid if (idx, float(g)) in best]
     return out
 
 
@@ -120,10 +144,9 @@ if __name__ == "__main__":
     print(f"canonical: weighted {1e4*w0:.1f}, unweighted {1e4*u0:.1f} vol bp "
           f"over {len(surf)} points\n", flush=True)
 
-    print("  profile in H:", flush=True)
-    prof_H = profile(surf, 0, H_GRID, starts, both)
-    print("\n  profile in rho:", flush=True)
-    prof_rho = profile(surf, 5, RHO_GRID, starts, both)
+    workers = int(os.environ.get("PROFILE_WORKERS", "6"))
+    res = profile_parallel(surf, [(0, H_GRID), (5, RHO_GRID)], starts, workers=workers)
+    prof_H, prof_rho = res[0], res[5]
 
     # A confidence set by the standard profile rule: keep every fixed value whose
     # re-optimised fit is within a tolerance of the best. We use 5% relative
