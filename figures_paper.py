@@ -82,13 +82,20 @@ fig.tight_layout(); fig.savefig("figures/fig1_n_convergence.png", dpi=140); plt.
 cal = json.load(open("calib_real.json"))
 p = dict(V0=cal["V0"], theta=cal["theta"], lam=cal["lam"], nu=cal["nu"], rho=cal["rho"]); H = cal["H"]
 surf = cap_points_per_maturity(build_surface(pd.read_csv("data/deribit_chain.csv"), r=0.0))
+# Model IVs through the SAME routine the calibration uses (calibrate._model_ivs):
+# maturity-adaptive Fourier truncation, and a point priced at or below intrinsic
+# floored rather than dropped. This figure previously priced with a fixed
+# u_max=100 and silently discarded points that failed to invert -- the two
+# defects corrected in the calibration itself -- so it showed a flattering
+# subset of the surface.
+from calibrate import _model_ivs, PARAM_NAMES
+_iv_all = _model_ivs(np.array([cal[k] for k in PARAM_NAMES]), surf, 0.0)
 per = {}                                       # T -> (k, mkt_iv, mdl_iv)
 mk, mdl, mats = [], [], []
 for T, g in surf.groupby("T"):
-    kk = g["k"].values; K = np.exp(kk)
-    px = np.atleast_1d(price_european_fourier(1.0, K, T, 0.0, p, H, N=200, u_max=100, n_u=1000))
-    mi = np.array([implied_vol(px[i], 1.0, K[i], T, 0.0, "C") for i in range(len(K))])
-    ok = np.isfinite(mi)
+    idx = g.index.values; kk = g["k"].values
+    mi = _iv_all[idx]
+    ok = np.isfinite(mi)                        # only a genuine pricer failure is absent
     per[T] = (kk[ok], g["iv"].values[ok], mi[ok])
     mk += list(g["iv"].values[ok]); mdl += list(mi[ok]); mats += [T] * ok.sum()
 mk, mdl, mats = np.array(mk), np.array(mdl), np.array(mats)
@@ -113,19 +120,25 @@ a1.set_title("(b) smiles: market (o) vs model (--)"); a1.legend(fontsize=8); a1.
 fig.suptitle(f"BTC calibration fit  (H={H:.3f}, $\\rho$={cal['rho']:.2f})", y=1.02)
 fig.tight_layout(); fig.savefig("figures/fig2_calibration_fit.png", dpi=140, bbox_inches="tight"); plt.close(fig)
 
-# ---------- Fig 3: hybrid calibration (fallbacks committed at 8aba282) ----------
-meth = ["Fourier\nfrom scratch", "PINN-only\n(single-shot)", "Hybrid\n(PINN+polish)"]
-_h = from_json("task5_hybrid", lambda d: d["summary"], None, "fig3")
-if _h:
-    rmse3 = [_h["scratch"]["rmse"], _h["ai_only"]["rmse"], _h["hybrid"]["rmse"]]
-    err3 = [_h["scratch"]["rmse_sd"], _h["ai_only"]["rmse_sd"], _h["hybrid"]["rmse_sd"]]
-    evals3 = [_h["scratch"]["evals"], _h["ai_only"]["evals"], _h["hybrid"]["evals"]]
-    ev_err = [_h["scratch"]["evals_sd"], _h["ai_only"]["evals_sd"], _h["hybrid"]["evals_sd"]]
-else:
-    rmse3 = [23.7, 222.0, 29.4]; err3 = [0, 20, 7.1]
-    evals3 = [2018, 0, 237]; ev_err = [0, 0, 46]
-fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 4.4))
-cols = ["tab:gray", "tab:orange", "tab:blue"]
+# ---------- Fig 3: hybrid calibration, both training boxes ----------
+# Reads results/param_boxes.json (diagnose_param_boxes.py). The previous version
+# looked for a "task5_hybrid" file that no script writes, so it always fell back
+# to hard-coded submitted-version numbers without saying so. It now refuses to
+# draw from anything but the measured results.
+_pb = from_json("param_boxes", lambda d: d.get("payload", d), None, "fig3")
+if _pb is None:
+    raise SystemExit("fig3: results/param_boxes.json missing -- run diagnose_param_boxes.py")
+_F, _b = _pb["from_scratch"], _pb["per_box"]
+meth = ["from scratch", "AI-only\noriginal box", "AI-only\nwidened box",
+        "hybrid\noriginal box", "hybrid\nwidened box"]
+rmse3 = [_F["rmse_vol_bp"], _b["default"]["ai_only_rmse"]["mean"], _b["wide"]["ai_only_rmse"]["mean"],
+         _b["default"]["hybrid_rmse"]["mean"], _b["wide"]["hybrid_rmse"]["mean"]]
+err3 = [0, _b["default"]["ai_only_rmse"]["sd"], _b["wide"]["ai_only_rmse"]["sd"],
+        _b["default"]["hybrid_rmse"]["sd"], _b["wide"]["hybrid_rmse"]["sd"]]
+evals3 = [_F["evals"], 0, 0, _b["default"]["hybrid_evals"]["mean"], _b["wide"]["hybrid_evals"]["mean"]]
+ev_err = [0, 0, 0, _b["default"]["hybrid_evals"]["sd"], _b["wide"]["hybrid_evals"]["sd"]]
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
+cols = ["tab:gray", "tab:orange", "#f5b971", "tab:blue", "#8fb8de"]
 a1.bar(meth, rmse3, yerr=err3, color=cols, capsize=4)
 a1.axhline(rmse3[0], color="k", ls=":", lw=1); a1.set_ylabel("fit RMSE (vol bp, true model)")
 a1.set_title("Calibration quality"); a1.grid(axis="y", alpha=.3)

@@ -200,17 +200,24 @@ def table_risk():
 def table_liquid():
     """Table: liquid-core refit. (R1.6)"""
     d = _load("liquid_core")
+    starts = d.get("starts", {})
+    # Only the reference fit (calib_real.json at run time) is shown unrefitted: the
+    # second start is the pre-correction wide-box vector, useful as a warm start
+    # but not a fit anyone should read. Refits are labelled by the H they began at,
+    # so the reader sees both converge on the restricted windows.
+    start_H = {k: v[0] for k, v in starts.items()}
     rows = []
     for label, w in d["windows"].items():
         tex = r"$|k|\le%.2f$" % float(label.split("<=")[1]) if label.startswith("|k|<=") else label
-        for name, u in w["unrefitted"].items():
-            rows.append(r"%s & %d & %s, no refit & $%.1f$ & $%.1f$ & -- & -- & --" % (
-                tex, w["n_points"], name, u["weighted_vol_bp"], u["unweighted_vol_bp"]) + EOL)
-            tex = ""                                     # print the window once
+        u = w["unrefitted"].get("canonical")
+        if u:
+            rows.append(r"%s & %d & full-surface fit & $%.1f$ & $%.1f$ & -- & -- & --" % (
+                tex, w["n_points"], u["weighted_vol_bp"], u["unweighted_vol_bp"]) + EOL)
         for name, f in w["refitted"].items():
             p = f["params"]
-            rows.append(r" & & refit from %s & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
-                name, f["weighted_vol_bp"], f["unweighted_vol_bp"], p["H"], p["rho"], p["nu"]) + EOL)
+            rows.append(r" & & refit, start $H{=}%.2f$ & $%.1f$ & $%.1f$ & $%.3f$ & $%+.3f$ & $%.3f$" % (
+                start_H.get(name, float("nan")), f["weighted_vol_bp"], f["unweighted_vol_bp"],
+                p["H"], p["rho"], p["nu"]) + EOL)
     _write("liquid", rows, "results/liquid_core.json, git " + _sha("liquid_core"))
 
 

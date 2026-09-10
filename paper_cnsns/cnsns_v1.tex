@@ -86,6 +86,7 @@ whether it degrades with the lifted dimension the way a finite-difference grid
 would. It does not: measured against an independent lifted Monte Carlo at the
 same $n$, and cleanly separated from the model-approximation error of the lift
 itself, the network's solve-error grows only sub-linearly---from
+%% SWEEP: replace the submitted-version n-convergence figures with results/n_convergence.json
 $5.4\pm1.0$ to $10.7\pm2.0$ price basis points as $n$ climbs from 4 to 32---while
 a naive full-tensor finite-difference grid would need $50^{n+1}$ points and is
 infeasible by $n{=}8$. That count is an illustrative memory bound for the naive
@@ -100,12 +101,13 @@ itself. Used alone it is fast but insufficiently accurate to calibrate
 independently; used as a differentiable warm start for a short local refinement
 against the true (Fourier) forward model, it recovers full calibration quality
 at approximately nine times fewer expensive forward-model evaluations. All
-experiments calibrate to live Bitcoin option data from the Deribit exchange,
-recovering a rough Hurst exponent ($H\approx0.09$ at the canonical fit, though
-Section~\ref{sec:roughness_robustness} shows the surface supports a range of
-$H$) with strong negative correlation ($\rho\approx-0.79$). We report the fit
-quality plainly: the unweighted implied-vol RMSE is $496$ vol\bp{} ($174$
-vol\bp{} vega-weighted), which is coarse. That
+experiments calibrate to live Bitcoin option data from the Deribit exchange. The
+surface pins the correlation sharply ($\rho\approx-0.43$) but identifies the
+Hurst exponent only to an interval, $H\in[0.04,0.30]$; the interval lies well
+inside the rough regime, and an estimate from realised volatility that uses no
+option data at all falls inside it. We report the fit quality plainly: $113$
+vol\bp{} vega-weighted and $416$ unweighted, the latter dominated by options
+under two weeks, with maturities beyond two months fitted to $52$ vol\bp{}. That
 coarseness measures the lifted rough-Heston forward model's expressiveness on
 wide, richly curved crypto smiles---the filtered surface is free of static
 arbitrage, so it is not a data artefact---and is orthogonal to the neural
@@ -189,9 +191,10 @@ the true forward model, and we report where its accuracy generalises and where
 it does not.
 
 \item \textbf{A real-market solution of the inverse problem.} Calibrated to live
-Deribit Bitcoin option data, the recovered parameters return a genuinely rough
-Hurst exponent and a strongly negative skew, and we report the fit quality
-honestly rather than only the speed-up.
+Deribit Bitcoin option data, the surface identifies the correlation sharply and
+the Hurst exponent only to an interval that lies well inside the rough regime.
+We report that non-identification, its mechanism and its consequences for risk
+functionals, rather than a point estimate the data do not support.
 
 \item \textbf{Fast recalibration, quantified against the true forward model.}
 The parametric warm start plus a short exact-model polish recovers from-scratch
@@ -743,9 +746,9 @@ two-sided on both legs, \textbf{none} violates $C-P=F-K$ by more than the quoted
 bid--ask spread, though the residual RMS of $46$ px\bp{} (maximum $163$) is a
 reminder of how wide those spreads are.
 
-The conclusion we draw is narrow but useful: the $496$ vol\bp{} of
-Section~\ref{sec:btc} \emph{cannot} be blamed on static-arbitrage violations in
-the target, because there are none. It is a statement about the forward model.
+The conclusion we draw is narrow but useful: the coarseness of the fit reported
+in Section~\ref{sec:btc} \emph{cannot} be blamed on static-arbitrage violations
+in the target, because there are none. It is a statement about the forward model.
 \IfFileExists{tables/liquid.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 
 \paragraph{The liquid core}
@@ -754,20 +757,21 @@ Table~\ref{tab:liquid} refits on the liquid core, $|k|\le0.10$ and $|k|\le0.20$,
 ends of the $H$ ridge of Section~\ref{sec:roughness_robustness}, and also evaluates the two
 unrefitted full-surface vectors on the same core points, which separates the effect of
 dropping the wings from the effect of re-optimising.
-Two things follow from Table~\ref{tab:liquid}. First, the wings account for a
-part of the residual but not for its character: restricting to $|k|\le0.10$
-improves the weighted objective from $174$ to $157$ vol\bp{} and the unweighted
-RMSE from $496$ to $411$, and on $|k|\le0.20$ to $154$--$157$ and $426$. A fit
-that remains above $400$ vol\bp{} on the fifty-three most liquid points is a
-statement about the lifted rough-Heston form on these smiles, not about
-illiquid quotes. Second, the two ends of the $H$ ridge of
-Section~\ref{sec:roughness_robustness} change places as the window narrows.
-On the full surface the smoother end ($H\approx0.25$) fits better by $11$
-vol\bp{} weighted; on $|k|\le0.20$ by $3$; on $|k|\le0.10$ the rough end
-($H\approx0.09$) wins by $9$, while the unweighted RMSE stays within $2$
-vol\bp{} of a tie at every window. $H$ is thus a wing-sensitive parameter on
-this surface, and its non-identification is not a wing artefact either: it
-holds at every window.
+Two things follow from Table~\ref{tab:liquid}, and the comparison that matters is
+on a common set of points. First, the wings are not what makes the fit coarse.
+On the fifty-three points with $|k|\le0.10$, the full-surface fit scores
+$160.4$ vol\bp{} weighted and $510.8$ unweighted; refitting on those points alone
+improves this only to $146.4$ and $450.0$, a gain of nine to twelve per cent. A
+model that remains above $450$ vol\bp{} on the most liquid quotes it is shown is
+not being defeated by illiquid ones; the residual belongs to the lifted
+rough-Heston form. Second, and more interesting, the recovered $H$ depends
+strongly on the window: $0.020$ on $|k|\le0.10$, $0.057$ on $|k|\le0.20$, and
+$0.172$ on the full surface. On both restricted windows the two warm starts
+converge to the same parameters---to $0.2$ vol\bp{} on the core and to the
+reported precision on $|k|\le0.20$---so there $H$ \emph{is} identified. The
+non-identification of Section~\ref{sec:roughness_robustness} is therefore
+specifically a property of the far wings, which is where the smoother-kernel,
+higher-vol-of-vol end of the ridge buys its fit.
 \begin{table}[!htbp]
 \centering
 \caption{Liquid-core refit. Fit quality in vol\bp, weighted by the vega weights of the objective and unweighted. Unrefitted rows evaluate the full-surface vectors on the restricted points.}
@@ -830,6 +834,10 @@ contain it and re-running the global search with the polish confined to the box.
 
 \subsection{The forward operator scales where the grid cannot}
 \label{sec:nconv}
+%% SWEEP: this whole paragraph -- seed count, the 5.4 -> 10.7 figures, 'a
+%% doubling', 'canonical calibration' -- is the submitted version. Rewrite from
+%% results/n_convergence.json (8 seeds, 1600-step reference, reference fit) and add
+%% the log-log OLS slope with its CI and the permutation test for monotonicity (M1).
 Our headline forward-operator experiment trains one architecture (width 64,
 depth 4) at $n{=}4,8,16,32$ on the canonical BTC calibration at $T{=}0.15$, over
 three independent seeds (Table~\ref{tab:nconv}, Figure~\ref{fig:nconv}). The
@@ -1054,69 +1062,95 @@ Configuration & solve-error & puts & ATM & calls \\
 \end{figure}
 \fi
 
-\subsection{Solving the inverse problem: Bitcoin is genuinely rough}
+\subsection{Solving the inverse problem: the correlation is pinned, the roughness is not}
 \label{sec:btc}
 Calibrated to the full Deribit BTC surface with a full-budget optimiser
-(differential evolution, 60 generations, all 13 maturities, 97 points, followed
-by Nelder--Mead polish against the true Fourier forward model), rough Heston
-returns
+(differential evolution, 60 generations, all 13 maturities and all 104 points,
+followed by a bounded Nelder--Mead polish against the true Fourier forward
+model), rough Heston returns
 \begin{equation*}
-  H{=}0.090,\quad \rho{=}{-}0.792,\quad V_0{=}0.103,\quad
-  \theta{=}0.253,\quad \lambda{=}2.567,\quad \nu{=}0.300,
+  H{=}0.172,\quad \rho{=}{-}0.426,\quad V_0{=}0.105,\quad
+  \theta{=}0.245,\quad \lambda{=}4.94,\quad \nu{=}1.37,
 \end{equation*}
-at an implied-vol RMSE of 496 vol\bp{} unweighted, 174 vol\bp{} under the
-vega weights the objective actually uses (Figure~\ref{fig:calib}). The Hurst
-exponent is rough and the correlation strongly negative---the signature of a
-crypto market with a steep, persistent left skew---but we show in
-Section~\ref{sec:roughness_robustness} that this surface does not pin $H$
-sharply, so the point value should be read together with the interval given
-there. We do not dress
-up the inverse-problem fit quality: at 496 vol\bp{} it is coarse, and the
-per-maturity smiles in Figure~\ref{fig:calib}(b) show where the model strains.
-That coarseness is a statement about the forward model's expressiveness on wide,
-richly curved crypto smiles, not about the AI forward operator; it is orthogonal
-to the solve-error studied above.
+at a vega-weighted implied-vol RMSE of $113$ vol\bp{} and an unweighted RMSE of
+$416$ vol\bp{} (Figure~\ref{fig:calib}). The unweighted figure is dominated by
+one part of the surface. On the thirty-two points with maturities beyond two
+months the model fits to $52$ vol\bp{}, comfortably inside a quoted Bitcoin
+option spread; on the forty-eight points under two weeks it misses by $608$.
+Rough Heston describes the BTC term structure well and fails only on the
+shortest-dated options, whose smiles are too steep for this model to follow.
+That is a statement about the forward model's expressiveness, not about the AI
+forward operator, and it is orthogonal to the solve-error studied above.
+
+\paragraph{A correction to the submitted fit}
+The submitted version reported $H{=}0.090$, $\rho{=}{-}0.792$, $\nu{=}0.300$ at
+$496$ vol\bp{}. That fit was produced by an objective with a defect we found
+during this revision, and we state it plainly because it changes the headline
+parameters. When the Fourier price at a point fell at or below intrinsic value,
+the implied-volatility inversion returned no value and the objective silently
+dropped the point and renormalised over the rest. A parameter vector at which
+badly fitted points \emph{failed to price} therefore scored better than one that
+priced them, and the optimiser could lower the loss by breaking the pricer. The
+submitted $H{=}0.090$ sits in a window of width $2\times10^{-4}$ in $H$ created in
+exactly that way. A second defect compounded it: the Lewis integrand decays like
+$\exp(-VTu^2/2)$, so its truncation frequency must scale with $1/\sqrt{VT}$, and a
+fixed truncation mis-priced the shortest maturities by up to $0.33$ in implied
+volatility. Both are corrected. Every point now counts in every evaluation, a
+point priced at or below intrinsic enters at the floor of the inversion bracket
+so that its full error is charged, and a genuine pricer failure makes the whole
+parameter vector infeasible rather than lighter. Scored under the corrected
+objective the submitted vector reaches $204$ vol\bp{} weighted against $113$ for
+the fit above.
+
+The correlation and the vol-of-vol moved substantially; the roughness did not
+move in the way that matters. Section~\ref{sec:roughness_robustness} shows that
+this surface pins $\rho$ to within a single grid point but leaves $H$ free over
+$[0.04,\,0.30]$ at five per cent of the best fit, so the point value $0.172$
+above is one draw from that interval and not a measurement.
 
 \begin{figure}[!htbp]\centering
 \includegraphics[width=0.98\linewidth]{fig2_calibration_fit.png}
-\caption{Rough Heston calibrated to the Deribit BTC surface (97 points, 13
+\caption{Rough Heston calibrated to the Deribit BTC surface (all 104 points, 13
 maturities), solving the inverse problem with the true Fourier forward model.
-(a)~Market versus model implied volatility at all points (dashed: identity;
-colour: maturity). (b)~Per-maturity smiles for four representative maturities:
-market (markers) versus model (dashed). The residual spread reflects a
-model-expressiveness limitation on wide crypto smiles, not a forward-operator
-artefact.}
+(a)~Market versus model implied volatility at every point (dashed: identity;
+colour: maturity); the outliers are the shortest maturities. (b)~Per-maturity
+smiles for four representative maturities: market (markers) versus model
+(dashed). Beyond two months the model fits to $52$ vol\bp{}; the residual is
+concentrated in options under two weeks and reflects a model-expressiveness
+limitation, not a forward-operator artefact.}
 \label{fig:calib}
 \end{figure}
 
 \subsection{Is the recovered roughness real, and is it stable?}
 \label{sec:roughness_robustness}
-The claim that Bitcoin is genuinely rough rests, so far, on one option surface
-read through a six-parameter inverse problem. Two things could undermine it. The
-inverse problem might not identify $H$ sharply, in which case $H{=}0.090$ would
-be one point on a flat ridge rather than a measurement; and even if it does, a
-single snapshot says nothing about whether the roughness is a stable feature of
-the market or an artefact of one day's regime. We test both, the second using an
-estimator that never touches an option price.
+Whether Bitcoin volatility is rough rests, so far, on one option surface read
+through a six-parameter inverse problem. Two things could undermine the claim.
+The inverse problem might not identify $H$ sharply, in which case any single
+fitted value would be one point on a flat ridge rather than a measurement; and
+even if it does, a single snapshot says nothing about whether the roughness is a
+stable feature of the market or an artefact of one day's regime. We test both,
+the second using an estimator that never touches an option price.
 
 \paragraph{Whether the surface identifies $H$}
-Not sharply. Two experiments say so. First, while sizing the regime study we
-ran the calibration on the headline snapshot with the light optimiser budget of
-the paragraph on optimiser settings in Section~\ref{sec:calib} (10 generations, population 8): it returned
-$H=0.174$ against the full-budget $0.090$, at essentially the same unweighted
-fit ($495$ versus $496$ vol bp). Second, we repeated the full-budget fit with
-every bound widened---$H\in[0.02,0.45]$, $V_0,\theta\in[0.005,0.45]$,
-$\lambda\in[0.05,3]$, $\nu\in[0.05,2]$, $\rho\in[-0.95,-0.05]$---and a bounded
-polish. It converged to
-\[
-  H=0.251,\;\; \nu=0.594,\;\; \rho=-0.650,\;\;
-  \lambda=2.96,\;\; V_0=0.115,\;\; \theta=0.256
-\]
-at $486$ vol bp: ten basis points, or two per cent, better than the canonical
-fit, for a Hurst exponent nearly three times larger. The loss surface has a long,
-nearly flat ridge in $H$ along which $\nu$ and $\rho$ compensate---a rougher
-kernel with a smaller vol-of-vol and a stronger skew prices this surface about
-as well as a smoother kernel with a larger vol-of-vol and a milder skew.
+It does not. The first evidence is simply that three full-budget fits of the
+same surface under the same corrected objective, differing only in the search
+box, disagree about $H$ by a factor of nine while agreeing about everything a
+reader would check:
+\begin{center}\small
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+search box & $H$ & $\nu$ & $\rho$ & weighted & unweighted \\
+\midrule
+original, unbounded polish & $0.019$ & $0.75$ & $-0.419$ & $114.9$ & $453.7$ \\
+widened                    & $0.096$ & $0.98$ & $-0.421$ & $113.7$ & $430.2$ \\
+widened further            & $0.172$ & $1.37$ & $-0.426$ & $113.2$ & $416.4$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The weighted objective differs by $1.7$ vol\bp{} across the three, and $\rho$
+by $0.007$. The loss surface has a long, nearly flat ridge in $H$ along which
+$\nu$ compensates: a rougher kernel with a smaller vol-of-vol prices this surface
+about as well as a smoother kernel with a larger one.
 A profile likelihood makes this precise (Table~\ref{tab:profile},
 Figure~\ref{fig:profile}). Fixing $H$ on a twelve-point grid and re-optimising
 the other five parameters from both ends of the ridge, the weighted objective
@@ -1138,10 +1172,13 @@ $[0.05,3]$, where it sat on the upper bound at ten of twelve grid points; the
 figures above use a box wide enough to contain it, which widened the $H$
 interval from $[0.04,0.18]$ to $[0.04,0.30]$.
 We therefore do three things. We report the option-implied $H$ as an interval
-rather than a point; we keep the canonical $H=0.090$ fit as the working point
-for every PINN experiment, because it is the stiffer and therefore harder case
-for the solver (Section~\ref{sec:problem}); and we lean on the estimate
-below, which never passes through this inverse problem at all.
+rather than a point. We run every PINN experiment in this paper at the best
+fit, $H=0.172$ with $\nu=1.37$ and $\lambda=4.94$, and we note that this is a
+deliberately demanding choice: the fast mean-reversion and large vol-of-vol make
+the lifted factor system markedly stiffer than at the parameters of the
+submitted version, and every solve-error in Section~\ref{sec:nconv} is larger
+for it. And we lean on the estimate below, which never passes through this
+inverse problem at all.
 
 \IfFileExists{tables/profile.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 \begin{table}[!htbp]
@@ -1211,8 +1248,10 @@ $841$k bars) this returns
 \]
 with the interval from a $60$-day moving-block bootstrap. This is an independent
 corroboration in the strongest available sense: it uses no option data, no
-Markovian lift, no Fourier pricer and no optimiser, and it lands close to the
-option-implied $H{=}0.090$. It also agrees with Takaishi~\citep{takaishi2020rough}, who
+Markovian lift, no Fourier pricer and no optimiser, and it lands inside the
+option-implied interval $[0.04,\,0.30]$. Where the option surface cannot choose a
+point on its ridge, this estimate can, and it chooses one well inside the rough
+regime. It also agrees with Takaishi~\citep{takaishi2020rough}, who
 reports rough volatility for Bitcoin over an earlier and disjoint sample.
 
 We report the block-bootstrap interval rather than the regression's own standard
@@ -1294,13 +1333,26 @@ Figure~\ref{fig:hybrid} report the calibration experiment with three seeds.
 
 The parametric network adds $(H,\nu,\rho,\lambda,\theta)$ as five additional
 inputs, holding $V_0$ and the maturity fixed; we use $n{=}10$ (the crossover
-rule, Section~\ref{sec:decomp_results}) and width 96, depth 5. At the box centre
-its solve-error is $11.0\pm4.7$ px\bp{} versus $5.9\pm1.2$ for a single-point
-forward operator at the same $n$---roughly a two-fold penalty for generality.
-The penalty is uneven: it hovers near $9$--$11$ px\bp{} at typical parameter
-vectors but climbs to $47.7$ in the rough low-$H$ corner and $29.8$ at high
-$\nu$, where the PDE is stiffest---the generalisation limit of this AI forward
-operator, stated explicitly rather than averaged away.
+rule, Section~\ref{sec:decomp_results}) and width 96, depth 5. We train it on two
+boxes with identical architecture, budget and seeds: the original box of the
+submitted version ($\nu\le0.6$, $\theta\le0.35$) and a widened one ($\nu\le1.0$,
+$\theta\le0.45$) that contains the optimum of the $T{=}0.15$ slice. That turns
+the question of whether the box was mis-specified into a controlled ablation.
+
+Solve-error depends strongly on where in parameter space it is measured, and
+the probe points have to be read with that in mind. At mild parameter vectors
+the network is accurate---$3.6$ to $9.1$ px\bp{} at the weak-skew and
+strong-skew probes---while at the rough, low-$H$ probe it reaches $32$--$38$
+px\bp{}. At the calibrated vector itself the widened box gives $9.1\pm3.4$
+px\bp{} against $33.8\pm2.5$ for the original; that vector has $\nu=1.37$, outside
+\emph{both} training boxes, so both figures are extrapolations and the widened
+box's advantage is that it extrapolates a shorter distance. The corners are
+quantified in Figure~\ref{fig:heatmap}: the error concentrates where $H$ is small
+and $\nu$ large, reaching $38$--$40$ px\bp{}, and it is an interaction rather
+than the sum of two effects---adding a $\nu/H$ term to an additive regression
+raises $R^2$ from $0.42$--$0.49$ to $0.67$--$0.68$, a partial $R^2$ of $0.19$ to
+$0.25$. That is the generalisation limit of this AI forward operator, stated
+explicitly rather than averaged away.
 \IfFileExists{../figures/fig_heatmap.png}{\revtabletrue}{\revtablefalse}\ifrevtable
 \begin{figure}[!htbp]\centering
 \includegraphics[width=0.90\linewidth]{fig_heatmap.png}
@@ -1310,22 +1362,28 @@ operator, stated explicitly rather than averaged away.
 \fi
 
 Used as a standalone inverse-problem solver the parametric operator is fast
-(approximately $2$\,s, zero true-model calls) but poor: $222\pm20$ vol\bp{}
-under the true model. Two factors explain this. First, the network fits its own
-imperfect forward map, not the market. Second, the single-slice BTC optimum
-prefers $\nu\approx0.87$ and $\theta\approx0.39$, which lie \emph{outside} the
-training box, so the network cannot reach the true minimum---an identifiability
-issue of the training design, not of the underlying inverse problem. We would
-not recommend the standalone parametric operator as an inverse-problem solver.
+(approximately $2$\,s, zero true-model calls) but poor: $161\pm15$ vol\bp{} under
+the true model on the original box and $181\pm97$ on the widened one. The
+submitted version attributed this to the slice optimum lying outside the
+training box. The ablation does not support that explanation. The widened box
+contains the optimum ($\nu=0.99$ against a bound of $1.0$), yet its standalone
+fit is no better on average and far less reliable---the three seeds reach $316$,
+$92$ and $134$ vol\bp{}. Containing the optimum is necessary but not
+sufficient: the network fits its own imperfect forward map rather than the
+market, and over a wider box that map is less accurate where it matters. We do
+not recommend the standalone parametric operator as an inverse-problem solver,
+on either box.
 
-Used as a warm start it is effective. Seeding a Nelder--Mead polish against the
-true forward model with the network's parameter guess reaches
-$29.4\pm7.1$ vol\bp{}, on par with the from-scratch result---the $T{=}0.15$
-slice being fitted carries market implied vols spanning roughly 34\% to 52\%
-across the strike range, so a 29 vol\bp{} RMSE is well inside a quoted spread---in
-only $237\pm46$ true-forward-model evaluations and ${\approx}23$\,s: roughly nine
-times fewer expensive forward-model calls and seven times faster than solving the
-inverse problem from scratch. The value proposition is amortised: train the AI
+Used as a warm start it is effective, and on both boxes. Seeding a Nelder--Mead
+polish against the true forward model with the network's parameter guess reaches
+$23.8$ vol\bp{} from the original box and $23.6$ from the widened one, against
+$22.7$ for the from-scratch fit---on a slice whose market implied vols span
+roughly $34$ to $52$ per cent, so well inside a quoted spread. It does so in
+$197$ and $205$ true-forward-model evaluations against $1\,736$, a saving of
+$8.8\times$ ($8.7$--$8.9\times$ across seeds) and $8.5\times$ respectively, and in
+$17$\,s against $142$\,s. The warm start is insensitive to which box the network
+was trained on, which is the useful practical conclusion: the hybrid does not
+require the training box to be chosen well. The value proposition is amortised: train the AI
 forward operator once, then solve each new instance of the inverse problem
 cheaply, with the exact forward model kept in the loop for a brief, decisive
 finish.
@@ -1333,8 +1391,10 @@ finish.
 \begin{table}[!htbp]
 \centering
 \caption{Solving the calibration inverse problem for the BTC $T{\approx}0.15$
-slice, three methods, 3 PINN seeds. All fit-quality figures are judged by the
-true Fourier forward model over the same feasible region.}
+slice: the true-forward-model loop from scratch, and the AI-only and hybrid
+routes with the parametric network trained on the original box and on a widened
+box that contains the slice optimum. Three network seeds each; fit quality is
+judged by the true Fourier forward model over the same feasible region.}
 \label{tab:calib}
 \small
 \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X c c c@{}}
@@ -1358,8 +1418,10 @@ Hybrid (AI warm start, true-model polish) & $29.4\pm7.1$ & $23$   & $237\pm46$ \
 \includegraphics[width=0.82\linewidth]{fig3_hybrid.png}
 \caption{Hybrid solution of the inverse problem. Fit quality (left) and
 true-forward-model evaluation count (right) for the three methods. The hybrid
-matches from-scratch quality at ${\sim}9\times$ fewer true-model evaluations;
-the AI-only route is fast but inaccurate.}
+matches from-scratch quality at $8.5$--$8.8\times$ fewer true-model evaluations
+whichever box the network was trained on; the AI-only route is fast but
+inaccurate, and widening the box to contain the optimum makes it no better on
+average and far less reliable across seeds.}
 \label{fig:hybrid}
 \end{figure}
 
@@ -1494,17 +1556,19 @@ We have characterised a physics-informed neural network as a forward operator
 for the rough-volatility calibration inverse problem, on the
 $(n{+}1)$-dimensional Markovian-lifted PDE that makes the forward problem
 well-posed in the first place. The network's solve-error grows only
+%% SWEEP: conclusion -- replace 'below eleven px bp' with the final n=32 figure
 sub-linearly in the lifted dimension---staying below eleven price basis points
 to $n{=}32$ on the BTC calibration---while naive finite-difference forward
 solvers become infeasible by $n{=}8$, and we identify the four training choices
 that make this convergence behaviour hold. Separating solve-error from
 lift-error is essential to correctly attribute inverse-problem error and yields
 a concrete, maturity-dependent rule for the factor count. Applied to live
-Bitcoin options the recovered forward model is genuinely rough
-($H{\approx}0.09$), and a parametric extension of the forward operator, while
-not accurate enough to solve the inverse problem independently, is an effective
-warm start that solves it at roughly nine times fewer expensive forward-model
-evaluations. The methodological message is that an AI forward operator earns
+Bitcoin options, the surface pins the correlation but bounds the Hurst exponent
+only to $[0.04,0.30]$---rough, but not a point---and that ambiguity moves the
+variance-swap strike and the risk reversal by well under a vol point. A
+parametric extension of the forward operator, while not accurate enough to solve
+the inverse problem independently, is an effective warm start that solves it at
+$8.8$ times fewer expensive forward-model evaluations. The methodological message is that an AI forward operator earns
 its place inside an inverse-problem pipeline only once its own error is
 separated from the model error it is approximating---and that, done this way,
 it degrades gracefully where grid methods cannot follow.
