@@ -104,7 +104,7 @@ def fig_signed():
 
 
 def fig_hparams():
-    d = _load("hparams")
+    d = _load("hparams_rescored")   # scored against the 1600-step reference
     C = d["n_sweep"]
     n = [q["n"] for q in C]
     fig, ax = plt.subplots(figsize=(5.6, 3.4))

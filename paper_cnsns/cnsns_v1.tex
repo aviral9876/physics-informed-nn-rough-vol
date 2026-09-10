@@ -540,20 +540,46 @@ of the true model.
 \paragraph{Precision of the reference} Since every solve-error in this paper is
 measured against this simulator, its own error budget has to be smaller than the
 quantity being measured, and we state it explicitly rather than leave it
-implicit. All validation runs use $10^{6}$ antithetic paths and 400 time steps
-with a terminal-forward control variate. The resulting statistical standard
-error is $0.49$ px\bp{} at $n{=}4$ rising to $0.55$ px\bp{} at $n{=}32$, against
-solve-errors of $5$--$11$ px\bp{}: a signal-to-noise ratio above ten at every
-$n$. Two points deserve emphasis. First, the standard error must be computed on
-the antithetic \emph{pair means}, not on the individual paths; the naive
-independent-sample formula is not a valid estimator here and overstates the
-error by up to a factor of $3.3$ in the deep-in-the-money wing. Second, the
-time-discretisation bias --- which is a systematic error that no amount of
-sampling removes, and which is therefore the more dangerous of the two --- is
-bounded by a common-random-numbers refinement study at $0.07$, $0.17$, $0.41$
-and ${\lesssim}1.5$ px\bp{} for $n{=}4,8,16,32$ respectively. Both error sources
-are reported per strike in Section~\ref{sec:nconv} and, in full, in the
-replication package.
+implicit. All validation runs use $10^{6}$ antithetic paths and $1\,600$ time
+steps with a terminal-forward control variate. The statistical standard error is
+$0.69$ px\bp{} at $n{=}4$ rising to $0.81$ px\bp{} at $n{=}32$, against
+solve-errors of $15$--$22$ px\bp{}. Two points deserve emphasis. First, the
+standard error must be computed on the antithetic \emph{pair means}, not on the
+individual paths; the naive independent-sample formula is not a valid estimator
+here and overstates the RMS error by $14$--$31$ per cent. Second, the
+time-discretisation bias is a systematic error that no amount of sampling
+removes, and it is the more dangerous of the two. A common-random-numbers
+refinement study (Table~\ref{tab:mcq}) measures it at $0.21$, $0.17$, $0.82$ and
+$1.27$ px\bp{} for $n{=}4,8,16,32$ at $1\,600$ steps. We record why the step
+count is $1\,600$ and not the $400$ of the submitted version, because the choice
+was forced by the data. At the calibration of Section~\ref{sec:btc} the factor
+system is considerably stiffer than at the parameters we first validated on
+($\nu=1.37$ and $\lambda=4.94$ against $0.30$ and $2.57$), and at $400$ steps the
+bias grows to $3.2$ and $3.8$ px\bp{} at $n{=}16$ and $32$. That is comparable
+to the lift-error being measured, and it was visible: against the $400$-step
+reference the lift-error at those $n$ stopped falling and changed sign. At
+$1\,600$ steps the bias is below a tenth of every solve-error in this paper.
+
+\IfFileExists{tables/mcquality.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\begin{table}[!htbp]
+\centering
+\caption{Precision of the lifted Monte Carlo reference at the calibration of
+Section~\ref{sec:btc}, $T{=}0.15$, in price basis points. Standard errors are
+RMS over strikes; the naive column is the independent-sample formula, which is
+not valid under antithetic sampling and is shown only to quantify the
+overstatement. Time-discretisation bias is from a common-random-numbers
+refinement against $3\,200$ steps.}
+\label{tab:mcq}
+\small
+\begin{tabular}{@{}r r r r r r@{}}
+\toprule
+$n$ & SE, $2{\times}10^5$ & naive SE & SE, $10^6$ & bias, 400 & bias, 1\,600 \\
+\midrule
+\revrows{mcquality}
+\bottomrule
+\end{tabular}
+\end{table}
+\fi
 
 \subsection{Error decomposition}
 \label{sec:decomp}
@@ -890,7 +916,21 @@ solve-error grows, the growth sits in the stability constant $C(n)$; if the resi
 with it, the cause is optimisation or quadrature, and Table~\ref{tab:hpcolloc} tests the
 quadrature half directly by raising the collocation count at $n{=}32$, where the paper holds
 $n_{\mathrm{col}}$ at $2000$ while the dimension is $33$.
-%% HPARAMS: interpret once results/hparams.json lands.
+Three findings, the first two against us. The architecture used throughout this
+paper is not the best one available: width 128 at depth 4 reaches $9.7\pm0.5$
+px\bp{} at $n{=}4$ against $18.2\pm4.2$ for our width 64, at about one and a
+third times the training cost, and we report the headline results at width 64
+only for continuity with the submitted version. Second, collocation is
+under-resolved at high dimension: at $n{=}32$ raising $n_{\mathrm{col}}$ from
+$2000$ to $4000$ halves the solve-error ($22.1$ to $11.0$ px\bp{}), which is the
+quadrature term of the error estimate at work. Third, and this is the answer to
+where the growth with $n$ comes from, the held-out residual is flat across $n$
+to within twelve per cent while the solve-error rises by up to fifty-seven per
+cent. The network solves the PDE equally well at every dimension; what grows is
+the factor that converts residual into solution error, the stability constant
+$C(n)$ of the lifted operator \citep{mishra2023estimates,deryck2024error}. That
+is a property of the Markovian lift, not of the optimiser, and more training
+would not remove it.
 \begin{table}[!htbp]
 \centering
 \caption{Architecture grid at $n{=}4$, two seeds, $10^4$ iterations. Solve-error in px\bp{} against the 1M-path lifted MC; held-out PDE residual (RMS); minutes per run on CPU.}
@@ -978,8 +1018,20 @@ baseline is anchored on a pre-flight Monte Carlo of $4\,000$ paths, and a level 
 the anchor is a level error in the price, which is what an ATM/call bias looks like), and
 under-coverage of the factor tails in 32 dimensions. Table~\ref{tab:n32} re-estimates the
 anchor with $200\,000$ paths and widens the tails, separately and together, against the
-same 1M-path reference; the reference's own Euler bias at 400 steps is shown alongside.
-%% N32: interpret once results/n32_bias.json lands.
+same reference of $10^6$ antithetic paths at $1\,600$ time steps, whose own
+discretisation bias at this $n$ is $1.3$ px\bp{} (Table~\ref{tab:mcq}).
+The ablation separates the two cleanly. A precise anchor lowers the solve-error
+from $16.8$ to $14.3$ px\bp{} and the ATM bias by thirty vol\bp{}, so a noisy
+anchor is part of the mechanism. Widening the tails does the opposite: it raises
+the solve-error by $86$ per cent, roughly doubles the ATM bias and raises the
+call bias by seventy per cent, alone or combined with the precise anchor. Wider tails spend collocation points
+in regions of factor space the solution rarely visits, at the expense of the
+bulk where the price is determined. The residual bias that survives a precise
+anchor is the growth with $n$ that Section~\ref{sec:hparams} attributes to the
+stability constant of the lifted PDE. All figures in this table are scored
+against a $1\,600$-step reference; at the $400$ steps originally used, the
+reference itself priced high by $3$--$4$ px\bp{} at this $n$ and masked part of
+the network's over-pricing.
 \begin{table}[!htbp]
 \centering
 \caption{Ablation of the $n{=}32$ directional bias, three seeds. Solve-error in px\bp; signed implied-vol error by strike bucket in vol\bp{} (network minus lifted MC).}
@@ -1065,8 +1117,26 @@ fit, for a Hurst exponent nearly three times larger. The loss surface has a long
 nearly flat ridge in $H$ along which $\nu$ and $\rho$ compensate---a rougher
 kernel with a smaller vol-of-vol and a stronger skew prices this surface about
 as well as a smoother kernel with a larger vol-of-vol and a milder skew.
-%% PROFILE: insert the profile-likelihood interval sentence here once
-%% results/calib_uncertainty.json lands (diagnose_calib_uncertainty.py).
+A profile likelihood makes this precise (Table~\ref{tab:profile},
+Figure~\ref{fig:profile}). Fixing $H$ on a twelve-point grid and re-optimising
+the other five parameters from both ends of the ridge, the weighted objective
+moves by only $1.3$ vol\bp{} as $H$ runs from $0.04$ to $0.26$, and every value
+of $H$ in $[0.04,\,0.30]$ fits within five per cent of the best. The mechanism
+is visible in the re-optimised parameters: $\nu$ climbs from $0.80$ to $1.94$
+and $\lambda$ from $2.3$ to $7.6$ along the ridge while $\rho$ barely moves.
+Profiling $\rho$ in the same way gives the opposite picture: the objective rises
+steeply on either side of $\rho=-0.45$ ($146.5$ vol\bp{} at $-0.60$, $138.4$ at
+$-0.30$, against $115.0$ at $-0.45$), so the five-per-cent set is a single grid
+point. \emph{The surface identifies the correlation sharply and the roughness
+barely at all.} Because the whole $H$ interval lies far below $\tfrac12$, the
+qualitative claim that Bitcoin volatility is rough survives; the point estimate
+does not, and we do not report one. The profile's minimum, $113.2$ vol\bp{} at
+$H=0.18$, matches the global fit; because each point is a local re-optimisation,
+the reported values are upper bounds and the interval is, if anything, slightly
+too narrow. An earlier pass of this profile confined $\lambda$ to the box
+$[0.05,3]$, where it sat on the upper bound at ten of twelve grid points; the
+figures above use a box wide enough to contain it, which widened the $H$
+interval from $[0.04,0.18]$ to $[0.04,0.30]$.
 We therefore do three things. We report the option-implied $H$ as an interval
 rather than a point; we keep the canonical $H=0.090$ fit as the working point
 for every PINN experiment, because it is the stiffer and therefore harder case
@@ -1102,7 +1172,15 @@ along the ridge one sits. Table~\ref{tab:risk} prices three of them with the exa
 model at three months, for every parameter vector the surface cannot tell apart: the
 variance-swap fair strike (from the log-contract replication), the 25-delta risk reversal,
 and a 90/110 collar.
-%% RISK: interpret once results/risk_functionals.json carries the ridge vectors.
+The answer is reassuring, and it follows from the mechanism above. Across the nine
+ridge vectors---$H$ from $0.04$ to $0.30$, all within five per cent in fit---the
+variance-swap fair strike moves by $0.60$ vol points on a level of $43.4$, and
+the risk reversal by $0.46$; the collar, which is sensitive to the curvature of
+the smile between its two strikes, moves by $5.7$ px\bp{}. A seven-fold
+ambiguity in $H$ is therefore close to harmless for these functionals, because
+$\nu$ and $\lambda$ compensate and the functionals depend on the compensated
+combination rather than on $H$ alone. The practical corollary is the one a desk
+needs: what this surface cannot tell apart, these instruments do not care about.
 \begin{table}[!htbp]
 \centering
 \caption{Risk functionals along the calibration ridge, Fourier-priced at $T{=}0.25$, $S_0{=}1$, $r{=}0$. Variance swap as $\sqrt{K_{\mathrm{var}}}$ in annualised vol points; risk reversal as IV(25$\Delta$ call)$-$IV(25$\Delta$ put) in vol points; collar as long 90\% put, short 110\% call, in price basis points of spot.}
@@ -1170,7 +1248,22 @@ quote-based. From it we build 52 pre-ETF (calendar 2023) and 47 post-ETF (Februa
 Nelder--Mead from both ends of the ridge, never from the previous week, and
 Table~\ref{tab:regime} compares three things across the split: $H$ within each basin, the
 identified parameters $\rho$ and $\nu$, and which basin the week prefers.
-%% REGIME: interpret once results/regime_hurst.json lands.
+The roughness does not move. From either warm start the mean weekly $H$ is
+statistically indistinguishable before and after the approval (canonical start
+$0.099$ against $0.107$, bootstrap interval on the difference $[-0.071,+0.059]$;
+wide start $0.163$ against $0.132$, $[-0.059,+0.092]$), which agrees with the
+physical-measure result above from an entirely independent route. Two things do
+move: $\nu$ falls from $1.96$ to $1.63$ and the fit degrades from $124$ to $151$
+vol\bp{}, both with bootstrap intervals that exclude zero, and $\rho$ shifts by
+$-0.083$ with an interval that only just excludes it. We read the last with
+care. The weekly $\rho$ sits near zero, well away from the $-0.45$ of the
+headline snapshot, and that gap is the trade-versus-quote provenance difference
+of Section~\ref{sec:data} rather than a property of the market: a comparison
+\emph{across} weeks of the panel is sound, a comparison of its level with the
+headline fit is not. The weekly $H$ itself varies widely from week to week and
+between the two starts on the same week, which is the non-identification of the
+headline surface reappearing at weekly resolution; the stability test is
+meaningful only because each regime is summarised over roughly fifty weeks.
 \begin{table}[!htbp]
 \centering
 \caption{Option-implied parameters before and after the spot-ETF approval, 52 and 47 weekly surfaces. Mean\,$\pm$\,SD per regime; difference pre$-$post with a 4-week block-bootstrap 95\% interval and Welch $p$.}
@@ -1282,7 +1375,22 @@ three under one protocol. The supervised surrogate is built to match the paramet
 exactly: the same five inputs, the same fixed 21-point log-moneyness grid at $T{=}0.15$, the
 same widened box, Sobol-sampled and split by parameter vector so that no strike of a test
 vector is ever seen in training.
-%% OPERATORS: interpret once results/surrogate.json lands; do not hide the loss.
+We state the comparison plainly, because it goes against us on the axes most
+readers will check first. The supervised surrogate, trained on $64\,353$
+Fourier-labelled parameter vectors, reaches $5.7\pm0.1$ vol\bp{} against the
+transform method, and $9.3\pm1.0$ in the rough, high-$\nu$ corner where our
+parametric network degrades most. It is more accurate than the PINN against
+Fourier, and once trained it is as fast. On one-shot cost both the Fourier
+pricer and a short lifted Monte Carlo beat a PINN training run by three to four
+orders of magnitude. What the surrogate cannot do is exist without an exact
+pricer: every one of its labels came from the fractional Riccati solver, and in
+a model with no transform method it cannot be built at all. The PINN needs only
+the PDE. It also yields the solve/lift decomposition of
+Section~\ref{sec:decomp}, which a network fitted to Fourier labels inherits the
+lift error from silently and cannot separate. Those two properties---no exact
+pricer offline, and an error budget split into what training controls and what
+the lift dimension controls---are the case for this operator, and we make no
+claim beyond them.
 \begin{table}[!htbp]
 \centering
 \caption{Forward operators for the lifted rough-Heston smile at $T{=}0.15$. Error against Fourier is not comparable across rows: the surrogate is trained on Fourier labels, the PINNs are measured against an independent lifted Monte Carlo at the same $n$ and inherit the lift-error against Fourier on top.}

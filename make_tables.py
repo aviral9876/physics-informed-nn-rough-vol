@@ -53,7 +53,7 @@ def table_nconv():
     nseed = len(d["rows"][0].get("solves", [])) or "?"
     secs = {}
     try:
-        secs = {q["n"]: q["train_seconds"] for q in _load("hparams")["n_sweep"]}
+        secs = {q["n"]: q["train_seconds"] for q in _load("hparams_rescored")["n_sweep"]}
     except (FileNotFoundError, KeyError):
         pass
     rows = []
@@ -77,15 +77,18 @@ def table_mcquality():
     """
     d = _load("mc_quality")
     by_n = {r["n"]: r for r in d["statistical"]}
+    disc = {r["n"]: r["coarse"] for r in d["discretisation"]}
     nan = float("nan")
     rows = []
-    for h in d["headline"]:
-        r = by_n.get(h["n"], {})
-        # the statistical block stores SEs in price units; the table is in px bp
-        rows.append(r"%-3d & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%.1f$ & $%.1f$" % (
-            h["n"], 1e4 * r.get("rms_se_200k", nan),
-            1e4 * r.get("rms_se_200k_naive", nan), 1e4 * r.get("rms_se_1m", nan),
-            h["euler_bias_400_px_bp"], h["published"], h["denoised"]) + EOL)
+    # columns: n | paired SE 200k | naive SE 200k | paired SE 1M | bias @400 | bias @1600
+    # The bias at BOTH step counts is shown because the 400-step figure is what
+    # forced the move to 1600 at the corrected calibration.
+    for n in sorted(by_n):
+        r = by_n[n]; c = disc.get(n, {})
+        b = lambda s: 1e4 * c[s]["rms_bias"] if s in c else nan
+        rows.append(r"%-3d & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$" % (
+            n, 1e4 * r.get("rms_se_200k", nan), 1e4 * r.get("rms_se_200k_naive", nan),
+            1e4 * r.get("rms_se_1m", nan), b("400"), b("1600")) + EOL)
     _write("mcquality", rows, "results/mc_quality.json, git " + _sha("mc_quality"))
 
 
@@ -213,7 +216,7 @@ def table_liquid():
 
 def table_hparams():
     """Tables T-new5: architecture grid at n=4, and residual persistence across n. (M9, R1.3)"""
-    d = _load("hparams")
+    d = _load("hparams_rescored")   # scored against the 1600-step reference
     rows = [r"%d & %d & %d & $%.1f\pm%.1f$ & $%.2e$ & %.1f" % (
                 q["width"], q["depth"], q["n_params"], q["solve_mean"], q["solve_sd"],
                 q["residual_mean"], q["train_seconds"] / 60) + EOL
@@ -234,18 +237,23 @@ def table_hparams():
 
 def table_n32():
     """Table: n=32 bias ablation. (R1.7)"""
-    d = _load("n32_bias")
+    d = _load("n32_bias_rescored")  # scored against the 1600-step reference
     rows = []
     for name, c in d["configs"].items():
         sw = c["signed_solve_iv_bp"]
         rows.append(r"%s & $%.1f\pm%.1f$ & $%+.0f$ & $%+.0f$ & $%+.0f$" % (
             name, c["solve_mean"], c["solve_std"], sw["OTMputs"], sw["ATM"], sw["OTMcalls"]) + EOL)
-    e = d.get("euler_bias_row")
-    if e:
+    # Scored against the 1600-step reference; report THAT reference's bias, taken
+    # from the current-calibration precision study, not the stale 400-step figure.
+    try:
+        q = _load("mc_quality")
+        b = [r for r in q["discretisation"] if r["n"] == 32][0]["coarse"]["1600"]["rms_bias"]
         rows.append(r"\midrule")
-        rows.append(r"\multicolumn{5}{@{}l}{Reference Euler bias at 400 steps: $%.2f$ px\,bp "
-                    r"(finer grids price lower).}" % e["euler_bias_400_px_bp"] + EOL)
-    _write("n32bias", rows, "results/n32_bias.json, git " + _sha("n32_bias"))
+        rows.append(r"\multicolumn{5}{@{}l}{Reference: $10^6$ paths, 1\,600 steps; "
+                    r"its own bias $%.2f$ px\,bp.}" % (1e4 * b) + EOL)
+    except (FileNotFoundError, KeyError, IndexError):
+        pass
+    _write("n32bias", rows, "results/n32_bias_rescored.json, git " + _sha("n32_bias_rescored"))
 
 
 def table_surrogate():
