@@ -1,70 +1,213 @@
 {
- "runs": [
-  {
-   "box": "default",
-   "seed": 0,
-   "width": 96,
-   "depth": 5,
-   "iters": 20000,
-   "n_col": 2500,
-   "seconds": 6251.043772697449,
-   "path": "outputs/param_default_w96d5_seed0.pt",
-   "box_values": {
-    "H": [
-     0.04,
-     0.2
-    ],
-    "nu": [
-     0.1,
-     0.6
-    ],
-    "rho": [
-     -0.95,
-     -0.2
-    ],
-    "lam": [
-     0.5,
-     4.0
-    ],
-    "theta": [
-     0.08,
-     0.35
+  "name": "train_parametric_boxes",
+  "written_utc": "2026-09-10T00:08:58+00:00",
+  "git_sha": "29ee5f8",
+  "git_dirty": true,
+  "python": "3.12.10",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "argv": [
+    "train_parametric_boxes.py"
+  ],
+  "payload": {
+    "runs": [
+      {
+        "box": "default",
+        "seed": 0,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 6251.043772697449,
+        "path": "outputs/param_default_w96d5_seed0.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            0.6
+          ],
+          "rho": [
+            -0.95,
+            -0.2
+          ],
+          "lam": [
+            0.5,
+            4.0
+          ],
+          "theta": [
+            0.08,
+            0.35
+          ]
+        },
+        "torch_threads": 4
+      },
+      {
+        "box": "default",
+        "seed": 1,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 7580.247449636459,
+        "path": "outputs/param_default_w96d5_seed1.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            0.6
+          ],
+          "rho": [
+            -0.95,
+            -0.2
+          ],
+          "lam": [
+            0.5,
+            4.0
+          ],
+          "theta": [
+            0.08,
+            0.35
+          ]
+        },
+        "torch_threads": 4
+      },
+      {
+        "box": "default",
+        "seed": 2,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 6040.849246501923,
+        "path": "outputs/param_default_w96d5_seed2.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            0.6
+          ],
+          "rho": [
+            -0.95,
+            -0.2
+          ],
+          "lam": [
+            0.5,
+            4.0
+          ],
+          "theta": [
+            0.08,
+            0.35
+          ]
+        },
+        "torch_threads": 4
+      },
+      {
+        "box": "wide",
+        "seed": 0,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 5663.992475986481,
+        "path": "outputs/param_wide_w96d5_seed0.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            1.0
+          ],
+          "rho": [
+            -0.95,
+            -0.05
+          ],
+          "lam": [
+            0.5,
+            5.0
+          ],
+          "theta": [
+            0.08,
+            0.45
+          ]
+        },
+        "torch_threads": 4
+      },
+      {
+        "box": "wide",
+        "seed": 1,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 4927.136193275452,
+        "path": "outputs/param_wide_w96d5_seed1.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            1.0
+          ],
+          "rho": [
+            -0.95,
+            -0.05
+          ],
+          "lam": [
+            0.5,
+            5.0
+          ],
+          "theta": [
+            0.08,
+            0.45
+          ]
+        },
+        "torch_threads": 4
+      },
+      {
+        "box": "wide",
+        "seed": 2,
+        "width": 96,
+        "depth": 5,
+        "iters": 20000,
+        "n_col": 2500,
+        "seconds": 5022.583562612534,
+        "path": "outputs/param_wide_w96d5_seed2.pt",
+        "box_values": {
+          "H": [
+            0.04,
+            0.2
+          ],
+          "nu": [
+            0.1,
+            1.0
+          ],
+          "rho": [
+            -0.95,
+            -0.05
+          ],
+          "lam": [
+            0.5,
+            5.0
+          ],
+          "theta": [
+            0.08,
+            0.45
+          ]
+        },
+        "torch_threads": 4
+      }
     ]
-   },
-   "torch_threads": 4
-  },
-  {
-   "box": "default",
-   "seed": 1,
-   "width": 96,
-   "depth": 5,
-   "iters": 20000,
-   "n_col": 2500,
-   "seconds": 7580.247449636459,
-   "path": "outputs/param_default_w96d5_seed1.pt",
-   "box_values": {
-    "H": [
-     0.04,
-     0.2
-    ],
-    "nu": [
-     0.1,
-     0.6
-    ],
-    "rho": [
-     -0.95,
-     -0.2
-    ],
-    "lam": [
-     0.5,
-     4.0
-    ],
-    "theta": [
-     0.08,
-     0.35
-    ]
-   },
-   "torch_threads": 4
   }
- ]
 }

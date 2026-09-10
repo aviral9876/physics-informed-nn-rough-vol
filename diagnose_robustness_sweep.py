@@ -52,7 +52,15 @@ SEEDS = tuple(range(8))
 # Reviewer 1 item 2: the reference is now 1M antithetic paths with the control
 # variate on (SE ~0.5 px bp, >=10x below the smallest signal). See
 # diagnose_mc_quality.py for the precision study that fixes this budget.
-MC_PATHS = 1_000_000; MC_STEPS = 400; MC_SEED = 7
+MC_PATHS = 1_000_000; MC_STEPS = 1600; MC_SEED = 7
+# Steps raised from 400 after re-measuring the Euler bias AT THE CORRECTED
+# calibration (diagnose_mc_quality.py, 2026-09-10): the stiffer factor system
+# (nu 1.37, lam 4.94) carries 3.2-3.8 px bp of discretisation bias at 400
+# steps, comparable to the lift-error being measured, which made the lift
+# non-monotone and change sign. At 1600 steps it is 0.2-1.3 px bp.
+# The pre-flight anchor is likewise raised: the R1.7 ablation
+# (diagnose_n32_bias.py) showed a 4k-path anchor costs ~30 vol bp of ATM bias.
+ANCHOR_PATHS, ANCHOR_STEPS = 200_000, 400
 buckets = [("OTMputs", kk < -0.05), ("ATM", np.abs(kk) <= 0.05), ("OTMcalls", kk > 0.05)]
 
 def pbp(a, b): return 1e4 * np.sqrt(np.mean((a - b) ** 2))
@@ -69,7 +77,10 @@ rows = []
 try:
     _prev = json.load(open("results/n_convergence_partial.json"))
     _prev = _prev.get("payload", _prev)
-    if _prev["config"]["seeds"] == list(SEEDS) and abs(_prev["config"]["H"] - H) < 1e-12             and _prev["config"]["iters"] == ITERS and _prev["config"]["mc_paths"] == MC_PATHS:
+    _c = _prev["config"]
+    if (_c["seeds"] == list(SEEDS) and abs(_c["H"] - H) < 1e-12
+            and _c["iters"] == ITERS and _c["mc_paths"] == MC_PATHS
+            and _c.get("mc_steps") == MC_STEPS):
         rows = _prev["rows"]
         print("resuming: n = %s already done" % [r_["n"] for r_ in rows], flush=True)
     else:
@@ -84,7 +95,7 @@ for n in NLIST:
     mpx, mse = price_european_mc(1.0, strikes, T, r, P, (c, x), n_paths=MC_PATHS,
                                  n_steps=MC_STEPS, seed=MC_SEED, control_variate=True)
     iv_m = ivs(mpx); lift_price = pbp(mpx, fpx)
-    mean, std, smean, _ = simulate_factor_stats(1.0, T, P, (c, x), 4000, 300, seed=1)
+    mean, std, smean, _ = simulate_factor_stats(1.0, T, P, (c, x), ANCHOR_PATHS, ANCHOR_STEPS, seed=1)
     solves = []; smiles = []
     for s in SEEDS:
         torch.manual_seed(s); np.random.seed(s)
@@ -106,6 +117,9 @@ for n in NLIST:
                      # the signed per-strike vectors feed the new figure that
                      # replaces the prose-only report of the high-n bias.
                      seeds=list(SEEDS), solves=solves.tolist(),
+                     # per-seed prices, so a future reference refinement can be
+                     # applied without retraining any network
+                     pinn_price_per_seed=[m.tolist() for m in smiles],
                      strikes=strikes.tolist(),
                      mc_price=mpx.tolist(), mc_stderr=mse.tolist(),
                      fourier_price=fpx.tolist(), pinn_price=ppx_avg.tolist(),
