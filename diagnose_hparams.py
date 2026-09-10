@@ -67,6 +67,30 @@ def heldout_residual(p):
 def n_params(p): return int(sum(t.numel() for t in p.net.parameters()))
 
 
+def residual_verdict(C, flat_tol=0.15):
+    """Where does the growth of solve-error with n live?
+
+    The a-priori bound is  solve <= C(n) * residual. Compare how far each quantity
+    moves ACROSS the whole n range, not at one endpoint: the first version of this
+    test looked only at n=32, where solve-error happened to fall back to 1.07x
+    n=4, and demanded the residual HALVE before calling it flat -- so it reported
+    "residual grows" on data where the residual moved 7% and solve-error 44%.
+    """
+    s = np.array([q["solve_mean"] for q in C]); r = np.array([q["residual_mean"] for q in C])
+    gs = float(s.max() / s[0])                        # largest solve growth over n=4
+    gr = float(r.max() / r.min())                     # full spread of the residual
+    if gr - 1.0 <= flat_tol and gs - 1.0 > 2 * flat_tol:
+        v = ("the held-out residual is flat across n (spread x%.2f) while solve-error grows "
+             "(peak x%.2f): the growth sits in the stability constant C(n), not in how well "
+             "the PDE is solved" % (gr, gs))
+    elif gr - 1.0 > flat_tol and abs(np.log(gr) - np.log(gs)) < 0.5 * np.log(gs):
+        v = ("the residual moves with the solve-error (x%.2f vs x%.2f): the growth is "
+             "optimisation or quadrature" % (gr, gs))
+    else:
+        v = ("inconclusive at this seed count: solve peak x%.2f, residual spread x%.2f" % (gs, gr))
+    return v, gs, gr
+
+
 if __name__ == "__main__":
     cal = json.load(open("calib_real.json"))
     P = dict(V0=cal["V0"], theta=cal["theta"], lam=cal["lam"], nu=cal["nu"], rho=cal["rho"]); H = cal["H"]
@@ -152,11 +176,8 @@ if __name__ == "__main__":
     for q in C:
         print("  %2d   %5.1f +- %4.1f   %.2e +- %.1e   %5.2f           %5.2f"
               % (q["n"], q["solve_mean"], q["solve_sd"], q["residual_mean"], q["residual_sd"], q["solve_mean"] / s4, q["residual_mean"] / r4))
-    gs, gr = C[-1]["solve_mean"] / s4, C[-1]["residual_mean"] / r4
-    verdict = ("the residual is roughly flat while the solve-error grows: the growth sits in the stability constant C(n)"
-               if gr < 0.5 * gs else
-               "the residual grows with the solve-error: the growth is optimisation/quadrature, not the PDE's stability constant")
-    print("\n  n=4 -> 32: solve x%.2f, residual x%.2f  =>  %s" % (gs, gr, verdict))
+    verdict, gs, gr = residual_verdict(C)
+    print("\n  across n: solve peaks at x%.2f, residual spans x%.2f  =>  %s" % (gs, gr, verdict))
 
     from resultio import dump
     dump("hparams", dict(T=T, iters=ITERS, seeds=list(SEEDS), strikes=strikes.tolist(), mc=MC,
