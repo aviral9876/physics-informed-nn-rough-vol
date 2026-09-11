@@ -1,0 +1,5 @@
+PINN forward solver for the Markovian-lifted rough-Heston pricing PDE
+Solver error shows no detectable growth in lift dimension; grid cost explodes
+Explicit decomposition separates network solve error from lift model error
+Parametric PINN warm-start cuts expensive forward-model calls about 9-fold
+Accuracy limits mapped: error grows in rough, high vol-of-vol corners
