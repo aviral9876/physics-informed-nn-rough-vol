@@ -1454,7 +1454,16 @@ was trained on, which is the useful practical conclusion: the hybrid does not
 require the training box to be chosen well. The value proposition is amortised: train the AI
 forward operator once, then solve each new instance of the inverse problem
 cheaply, with the exact forward model kept in the loop for a brief, decisive
-finish.
+finish. The amortisation has a concrete break-even. Each warm-started
+recalibration saves about $1\,535$ true-model evaluations, or $125$\,s of
+wall-clock; training the parametric network costs $87$ to $110$ minutes on the
+widened and original boxes. The network pays for itself after $42$ to $53$
+recalibrations of the same maturity slice: about two months of daily
+recalibration, or three and a half to four and a half hours of recalibration
+every five minutes. Below
+that, the exact forward model from scratch is the cheaper tool, and we would
+recommend it. The training times were measured while other jobs shared the
+machine, which inflates them, so the break-even is if anything overstated.
 
 \begin{table}[!htbp]
 \centering
