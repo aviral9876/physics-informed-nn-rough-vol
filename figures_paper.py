@@ -46,7 +46,9 @@ def from_json(name, extract, fallback, label):
 
 # ---------- Fig 1: n-convergence ----------
 # Fallbacks: the 3-seed run at 433afb6 (+ c86a976 for train time).
-_rows = from_json("n_convergence", lambda d: d["rows"], None, "fig1")
+# resultio.dump wraps results under "payload"; reading d["rows"] directly raised a
+# KeyError that from_json swallowed, so this figure silently drew the fallback.
+_rows = from_json("n_convergence", lambda d: d.get("payload", d)["rows"], None, "fig1")
 if _rows:
     n = np.array([r["n"] for r in _rows])
     solve_mean = np.array([r["solve_mean"] for r in _rows])
@@ -57,25 +59,46 @@ else:
     n = np.array([4, 8, 16, 32])
     solve_mean = np.array([5.4, 6.1, 8.8, 10.7]); solve_std = np.array([1.0, 1.4, 1.6, 2.0])
     lift = np.array([16.4, 7.9, 3.5, 1.7]); nseed = 3
-# train time comes from diagnose_n_convergence.py (single seed), not the sweep
-tsec = from_json("n_cost", lambda d: np.array(d["train_seconds"]),
+# train time: diagnose_n_cost.py, measured on an idle machine (the sweep does not time itself)
+tsec = from_json("n_cost", lambda d: np.array(d.get("payload", d)["train_seconds"]),
                  np.array([397, 386, 591, 457]), "fig1_time")
 fd = 50.0 ** (n + 1)
+# Resolution floor of the Monte Carlo reference: its statistical standard error
+# combined with its time-discretisation bias at 1600 steps. The bias is taken as
+# TWICE the measured 1600-vs-3200 difference, the first-order correction -- the
+# measured difference alone understates it because the 3200-step grid is itself
+# biased. Below this floor the lift-error is not resolvable with this reference.
+_floor = None
+try:
+    _q = json.load(open("results/mc_quality.json")); _q = _q.get("payload", _q)
+    _b = {r["n"]: 1e4 * r["coarse"]["1600"]["rms_bias"] for r in _q["discretisation"]}
+    _se = {r["n"]: 1e4 * r["rms_se_1m"] for r in _q["statistical"]}
+    _floor = np.array([np.sqrt(_se[ni] ** 2 + (2 * _b[ni]) ** 2) for ni in n])
+except Exception:
+    pass
 fig, axL = plt.subplots(figsize=(8.4, 5.2))
+if _floor is not None:
+    axL.fill_between(n, 1e-2, _floor, color="0.85", zorder=0,
+                     label="reference resolution floor")
 hL, = axL.plot(n, lift, "o-", color="tab:red", lw=2, label="lift-error (MC vs Fourier)")
 hS = axL.errorbar(n, solve_mean, yerr=solve_std, fmt="s-", color="tab:blue", lw=2,
                   capsize=4, label=f"PINN solve-error (vs lifted MC, {nseed}-seed)")
 axL.set_yscale("log"); axL.set_xscale("log", base=2); axL.set_xticks(n); axL.set_xticklabels(n)
 axL.set_xlabel("number of lift factors  $n$"); axL.set_ylabel("price RMSE (bp of spot, log)")
 axL.grid(alpha=.3, which="both")
-axR = axL.twinx(); hT, = axR.plot(n, tsec, "^--", color="tab:green", lw=1.4, label="PINN train time (s)")
-axR.set_ylabel("wall-clock to plateau (s), CPU", color="tab:green")
-axR.tick_params(axis="y", colors="tab:green"); axR.set_ylim(0, 800)
+axR = axL.twinx(); hT, = axR.plot(n, tsec, "^--", color="tab:green", lw=1.4, label="PINN cost per 10k iterations (s)")
+axR.set_ylabel("training cost per 10k iterations (s), CPU", color="tab:green")
+axR.tick_params(axis="y", colors="tab:green"); axR.set_ylim(0, 1.25 * max(tsec))
 axL.text(0.03, 0.03, "naive FD grid $50^{(n+1)}$:\n" +
          "\n".join(f"  $n{{=}}{ni}$: {f:.0e}" for ni, f in zip(n, fd)) + "\n(infeasible by $n{=}8$)",
          transform=axL.transAxes, fontsize=8, va="bottom",
          bbox=dict(boxstyle="round", fc="wheat", alpha=.6))
-axL.legend([hL, hS, hT], [h.get_label() for h in (hL, hS, hT)], loc="upper right", fontsize=9)
+_hh = [hL, hS, hT]
+if _floor is not None:
+    from matplotlib.patches import Patch
+    _hh.append(Patch(color="0.85", label="MC reference resolution floor"))
+axL.set_ylim(0.3, None)
+axL.legend(_hh, [h.get_label() for h in _hh], loc="upper right", fontsize=9)
 fig.tight_layout(); fig.savefig("figures/fig1_n_convergence.png", dpi=140); plt.close(fig)
 
 # ---------- Fig 2: BTC calibration fit (committed calib: 1e3913f) ----------

@@ -51,14 +51,17 @@ def table_nconv():
     """
     d = _load("n_convergence")
     nseed = len(d["rows"][0].get("solves", [])) or "?"
-    secs = {}
+    # Cost column: ms per training iteration from diagnose_n_cost.py, measured with
+    # nothing else running. The hparams grid's wall-clock times were taken under
+    # contention with three other jobs and are not costs.
+    ms = {}
     try:
-        secs = {q["n"]: q["train_seconds"] for q in _load("hparams_rescored")["n_sweep"]}
+        ms = {q["n"]: q["ms_per_iter"] for q in _load("n_cost")["rows"]}
     except (FileNotFoundError, KeyError):
         pass
     rows = []
     for r_ in d["rows"]:
-        t = ("$%.0f$" % secs[r_["n"]]) if r_["n"] in secs else "--"
+        t = ("$%.0f$" % ms[r_["n"]]) if r_["n"] in ms else "--"
         e = "%.1e" % (50.0 ** (r_["n"] + 1))
         mant, ex = e.split("e")
         rows.append(r"%-3d & $%.1f\pm%.1f$ & $%.1f$ & %s & $%s\times10^{%d}$" % (
