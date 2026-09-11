@@ -185,18 +185,32 @@ def table_profile():
 def table_risk():
     """Table: risk functionals for every vector the surface cannot tell apart. (R1.8)"""
     d = _load("risk_functionals")
-    rows = []
+    # "canonical" is calib_real.json at run time, i.e. the reference fit. The
+    # "wide-box refit" row is the PRE-correction wide-box vector (buggy objective):
+    # it is a warm start, not a fit, and is not shown.
+    label = {"canonical": "reference fit", "ridge": "profile ridge"}
+    rows, last = [], None
     for r_ in d["rows"]:
+        src = r_["source"]
+        if src.startswith("wide-box"):
+            continue
+        group = "hybrid" if src.startswith("hybrid") else src
+        if last is not None and group != last:
+            rows.append(r"\addlinespace")
+        last = group
+        name = ("hybrid, seed %s" % src.split()[-1]) if group == "hybrid" else label.get(src, src)
+        tag = r_["tag"].replace("%", r"\%").replace("H=", "$H{=}").replace(" (", "$ (")
+        if "$" in tag and tag.count("$") % 2:
+            tag += "$"
         rows.append(r"%s & %s & $%.2f$ & $%+.2f$ & $%+.1f$" % (
-            r_["source"], r_["tag"].replace("%", r"\%"), 100 * r_["varswap_vol"],
-            100 * r_["rr25_vol"], r_["collar_px_bp"]) + EOL)
+            name, tag, 100 * r_["varswap_vol"], 100 * r_["rr25_vol"], r_["collar_px_bp"]) + EOL)
     s = d["summary"]
-    if s["varswap_vol"]["ridge"]:
+    rr = s["varswap_vol"]["ridge"]
+    if rr:
         rows.append(r"\midrule")
-        rows.append(r"\multicolumn{5}{@{}l}{Range along the ridge (%d vectors): variance swap %.2f, "
-                    r"risk reversal %.2f vol pts; collar %.1f px\,bp.}" % (
-                        s["varswap_vol"]["ridge"]["n"], 100 * s["varswap_vol"]["ridge"]["range"],
-                        100 * s["rr25_vol"]["ridge"]["range"], s["collar_px_bp"]["ridge"]["range"]) + EOL)
+        rows.append(r"range, ridge (%d) & & $%.2f$ & $%.2f$ & $%.1f$" % (
+            rr["n"], 100 * rr["range"], 100 * s["rr25_vol"]["ridge"]["range"],
+            s["collar_px_bp"]["ridge"]["range"]) + EOL)
     _write("risk", rows, "results/risk_functionals.json, git " + _sha("risk_functionals"))
 
 
@@ -272,12 +286,11 @@ def table_surrogate():
     s = d["summary"]
     # columns: Operator & Offline cost & Exact pricer offline? & vs Fourier & vs lifted MC
     #          & Solve/lift split & Differentiable   (see tab:operators in the manuscript)
-    rows = [r"Supervised surrogate (MLP) & %.0f min $+$ %.0f s & yes & $%.1f\pm%.1f$ & -- & no & yes" % (
+    # columns: Operator | Offline cost | Exact pricer offline? | Accuracy (against) | Solve/lift split?
+    rows = [r"Supervised surrogate (MLP) & %.0f min labels $+$ %.0f\,s & yes & "
+            r"$%.1f$ vol\,bp (Fourier); $%.1f$ in the rough corner & no" % (
                 d["label_seconds"] / 60, s["train_seconds_mean"], s["test_rmse_mean"],
-                s["test_rmse_sd"]) + EOL,
-            r"\multicolumn{7}{@{}l}{\quad in the rough / high-$\nu$ corner: "
-            r"$%.1f\pm%.1f$ vol\,bp on %d test vectors.}" % (
-                s["corner_rmse_mean"], s["corner_rmse_sd"], d["runs"][0]["n_corner"]) + EOL]
+                s["corner_rmse_mean"]) + EOL]
     _write("surrogate", rows, "results/surrogate.json (%d labelled vectors), git %s"
            % (d["n_labelled"], _sha("surrogate")))
 
@@ -302,9 +315,16 @@ def table_environment():
     """Table T-new4: compute environment. (M7)"""
     d = _load("environment")
     env = d.get("environment", d)
-    rows = [r"%s & %s" % (k.replace("_", " ").capitalize(), v) + EOL
-            for k, v in env.items()
-            if not k.startswith("_") and isinstance(v, (str, int, float))]
+    # Rows for Table 1's hardware block. Labels are written out rather than derived
+    # from the keys; float precision is omitted because Table 1 already states it.
+    labels = [("cpu_model", "Processor"), ("cpu_count_logical", "Logical cores"),
+              ("ram_gb", "Memory (GB)"), ("os", "Operating system"),
+              ("python", "Python"), ("torch", "PyTorch"),
+              ("torch_threads", "PyTorch intra-op threads"), ("cuda_available", "GPU used"),
+              ("numpy", "NumPy"), ("scipy", "SciPy"), ("blas", "BLAS")]
+    fmt = lambda k, v: ("no" if k == "cuda_available" and not v else
+                        str(v).replace("(R)", "").replace("(TM)", "").replace("_", r"\_"))
+    rows = [r"%s & %s" % (lab, fmt(k, env[k])) + EOL for k, lab in labels if k in env]
     _write("environment", rows, "results/environment.json")
 
 

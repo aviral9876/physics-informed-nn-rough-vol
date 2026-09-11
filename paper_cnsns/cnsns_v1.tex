@@ -393,8 +393,12 @@ Terms balanced & PDE residual MSE, OTM boundary MSE, ITM boundary MSE \\
 Initial horizon & $\tau_0 = 0.15\,T$ \\
 Ramp fraction & Linear growth to $T$ over first $50\%$ of iterations \\
 \midrule
-\multicolumn{2}{l}{\textit{Hardware}} \\
+\multicolumn{2}{l}{\textit{Compute environment (every run in this paper)}} \\
+\IfFileExists{tables/environment.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
+\revrows{environment}
+\else
 Platform & CPU (single machine); code is GPU-compatible (\texttt{torch.device}) \\
+\fi
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -1072,9 +1076,9 @@ a watch item for anyone deploying the operator inside a calibration loop, since
 a one-signed error biases the recovered skew; we examine its mechanism next.
 \IfFileExists{tables/n32bias.tex}{\revtabletrue}{\revtablefalse}\ifrevtable
 
-\paragraph{The $n{=}32$ bias, taken apart.}
-Factor-tail coverage is symmetric by construction---the sampler widens both signs of the
-factor deviation and the asymmetric option is off by default---so asymmetry is not the
+\paragraph{The $n{=}32$ bias, taken apart}
+Factor-tail coverage is symmetric by construction: the sampler widens both signs of the
+factor deviation, and the asymmetric option is off by default, so asymmetry is not the
 mechanism. Two others are separable by ablation: a noisy forward-variance anchor (the
 baseline is anchored on a pre-flight Monte Carlo of $4\,000$ paths, and a level error in
 the anchor is a level error in the price, which is what an ATM/call bias looks like), and
@@ -1276,6 +1280,12 @@ ambiguity in $H$ is therefore close to harmless for these functionals, because
 $\nu$ and $\lambda$ compensate and the functionals depend on the compensated
 combination rather than on $H$ alone. The practical corollary is the one a desk
 needs: what this surface cannot tell apart, these instruments do not care about.
+The three hybrid vectors of Section~\ref{sec:parametric} tell a different story,
+and a useful one. They are fitted to the $T{=}0.15$ slice alone, and they price a
+risk reversal about half a vol point steeper and a collar seven basis points
+dearer than any full-surface fit: the ambiguity that matters in practice is not
+where on the ridge a calibration lands, but which part of the surface it was
+asked to fit.
 \begin{table}[!htbp]
 \centering
 \caption{Risk functionals along the calibration ridge, Fourier-priced at $T{=}0.25$, $S_0{=}1$, $r{=}0$. Variance swap as $\sqrt{K_{\mathrm{var}}}$ in annualised vol points; risk reversal as IV(25$\Delta$ call)$-$IV(25$\Delta$ put) in vol points; collar as long 90\% put, short 110\% call, in price basis points of spot.}
@@ -1513,17 +1523,26 @@ the lift dimension controls---are the case for this operator, and we make no
 claim beyond them.
 \begin{table}[!htbp]
 \centering
-\caption{Forward operators for the lifted rough-Heston smile at $T{=}0.15$. Error against Fourier is not comparable across rows: the surrogate is trained on Fourier labels, the PINNs are measured against an independent lifted Monte Carlo at the same $n$ and inherit the lift-error against Fourier on top.}
+\caption{Forward operators for the lifted rough-Heston smile at $T{=}0.15$.
+Accuracies are not comparable across rows, and the column says against what each
+is measured: the surrogate is trained on Fourier labels and scored against them,
+in implied-vol basis points, while the PINNs are scored in price basis points
+against an independent lifted Monte Carlo at the same $n$ and carry the
+lift-error against Fourier on top. The parametric range runs from mild
+parameter vectors to the rough, high-$\nu$ corner. Both PINNs and the surrogate
+are differentiable in their inputs; the Fourier pricer and the Monte Carlo are
+not. Costs for the PINNs are CPU wall-clock; the parametric figure was measured
+on a shared machine and is indicative.}
 \label{tab:operators}
 \footnotesize
-\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X l c c c c c@{}}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{2.3cm} >{\centering\arraybackslash}p{1.5cm} >{\raggedright\arraybackslash}p{2.7cm} >{\centering\arraybackslash}p{1.5cm}@{}}
 \toprule
-Operator & Offline cost & Exact pricer offline? & vs Fourier (vol\bp) & vs lifted MC & Solve/lift split & Differentiable \\
+Operator & Offline cost & Exact pricer offline? & Accuracy (against) & Solve/lift split? \\
 \midrule
-Fourier (fractional Riccati) & none & is the pricer & $0$ & -- & -- & no \\
-Lifted MC, $8\,000$ antithetic paths & none & no & lift-error (Table~\ref{tab:nconv}) & $\approx$ own SE & reference & no \\
-Single-point PINN, $n{=}4$ & 8--10 min per vector & no & $121$ & $37$ & yes & yes \\
-Parametric PINN, $n{=}10$ & 20--31 min once & no & solve $+$ lift & $11.0$ px\bp{} at centre & yes & yes \\
+Fourier (fractional Riccati) & none & is one & exact by construction & no \\
+Lifted MC, $10^6$ paths & none & no & reference; SE $0.7$--$0.8$ px\bp & no \\
+Single-point PINN, $n{=}4$ & ${\approx}20$ min per vector & no & $15.2$ px\bp{} (lifted MC) & yes \\
+Parametric PINN, $n{=}10$ & $80$--$125$ min, once & no & $3.6$--$38$ px\bp{} (lifted MC) & yes \\
 \revrows{surrogate}
 \bottomrule
 \end{tabularx}
