@@ -1171,8 +1171,8 @@ against the transform method, and $9.3\pm1.0$ in the rough, high-$\nu$ corner; i
 is more accurate than the PINN against Fourier and as fast once trained, and on
 one-shot cost the Fourier pricer and a short lifted Monte Carlo beat a PINN
 training run by orders of magnitude. What the surrogate cannot do is exist
-without an exact pricer---every label came from the fractional Riccati solver---
-whereas the PINN needs only the PDE, so it transfers to models with no transform
+without an exact pricer---every label came from the fractional Riccati
+solver---whereas the PINN needs only the PDE, so it transfers to models with no transform
 method; and the PINN yields the solve/lift decomposition of
 Section~\ref{sec:decomp}, which a network fitted to Fourier labels cannot
 separate. Those two properties are the case for this operator, and we claim
