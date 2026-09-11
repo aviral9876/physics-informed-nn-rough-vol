@@ -19,3 +19,6 @@ paper_cnsns/build.txt
 
 # stray local artifacts (kept on disk, not tracked)
 texput.log
+
+# Response letter and vendor correspondence: private, never pushed
+revision/
