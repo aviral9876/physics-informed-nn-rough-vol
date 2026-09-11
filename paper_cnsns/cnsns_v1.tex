@@ -69,55 +69,31 @@ Fast Warm-Start Hybrid}
 
 %% ----- Abstract ------------------------------------------------
 \begin{abstract}
-Calibrating a stochastic volatility model to an observed option surface is a
-classical inverse problem: given market prices, recover the parameters of a
-forward model that reproduces them. Rough-volatility models make this inverse
-problem unusually hard, because their forward problem has no finite-dimensional
-partial differential equation (PDE) to begin with---the variance is driven by a
-fractional, non-Markovian kernel. The standard remedy is a Markovian lift, which
-approximates the fractional kernel by $n$ exponentials and recovers a genuine,
-but $(n{+}1)$-dimensional, forward PDE. We build the forward operator for the
-resulting calibration inverse problem from a physics-informed neural network
-(PINN): a $\tanh$-activated multilayer perceptron trained to satisfy the lifted
-PDE's residual at randomly sampled collocation points, avoiding any computational
-grid. Because an AI forward operator is only as trustworthy as its own
-approximation error, we first characterise that error on its own terms, asking
-whether it degrades with the lifted dimension the way a finite-difference grid
-would. It does not: measured against an independent lifted Monte Carlo at the
-same $n$, and cleanly separated from the model-approximation error of the lift
-itself, the network's solve-error shows no statistically detectable growth as
-$n$ climbs from 4 to 32 (eight seeds per $n$; log-log slope $0.09\pm0.08$), and
-its training cost per iteration is flat, while a naive full-tensor
-finite-difference grid would need $50^{n+1}$ points and is infeasible by
-$n{=}8$. That count is an illustrative memory bound for the naive
-discretisation, not a benchmark against a tuned solver: sparse-grid, ADI and
-tensor-train methods reach substantially higher dimensions. We detail the four architecture and training choices needed for this
-convergence behaviour to hold in practice: a hard-constrained initial-condition
-ansatz, an integrated-variance baseline anchor, self-adaptive loss weighting, and
-a causal time-to-maturity curriculum. We then embed a parametric extension of
-this forward operator---one that also takes the five rough-Heston parameters as
-inputs and is differentiable in them---inside the calibration inverse problem
-itself. Used alone it is fast but insufficiently accurate to calibrate
-independently; used as a differentiable warm start for a short local refinement
-against the true (Fourier) forward model, it recovers full calibration quality
-at $8.8$ times fewer expensive forward-model evaluations. All
-experiments calibrate to live Bitcoin option data from the Deribit exchange. The
-surface pins the correlation sharply ($\rho\approx-0.43$) but identifies the
-Hurst exponent only to an interval, $H\in[0.04,0.30]$; the interval lies well
-inside the rough regime, and an estimate from realised volatility that uses no
-option data at all falls inside it. We report the fit quality plainly: $113$
-vol\bp{} vega-weighted and $416$ unweighted, the latter dominated by options
-under two weeks, with maturities beyond two months fitted to $52$ vol\bp{}. That
-coarseness measures the lifted rough-Heston forward model's expressiveness on
-wide, richly curved crypto smiles---the filtered surface is free of static
-arbitrage, so it is not a data artefact---and is orthogonal to the neural
-forward operator's solve-error, which is the quantity this paper studies.
+Calibrating a rough-volatility model to an option surface is an inverse problem
+whose fractional, non-Markovian variance admits no finite-dimensional forward
+partial differential equation (PDE). A Markovian lift approximates the kernel by
+$n$ exponentials and recovers an $(n{+}1)$-dimensional forward PDE, which we
+solve with a physics-informed neural network (PINN) trained on its residual.
+Measured against an independent lifted Monte Carlo at the same $n$, and separated
+from the lift's own approximation error, the network's solve-error shows no
+statistically detectable growth as $n$ rises from 4 to 32 (log-log slope
+$0.09\pm0.08$, eight seeds), whereas a naive full-tensor finite-difference
+grid---an illustrative bound, not a tuned solver---is infeasible by $n{=}8$. The
+solve/lift decomposition shows whether to add factors or improve the network. A
+parametric extension is too inaccurate to calibrate alone, but as a warm start
+for a short exact-model refinement it recovers full calibration quality at $8.8$
+times fewer expensive evaluations. On live Bitcoin options from Deribit, the
+surface pins the correlation ($\rho\approx-0.43$) but identifies the Hurst
+exponent only to an interval, $H\in[0.04,0.30]$, well inside the rough regime; a
+realised-volatility estimate using no option data falls inside it. The fit is
+$113$ vol\bp{} vega-weighted and $416$ unweighted, the latter dominated by
+options under two weeks; beyond two months it is $52$ vol\bp{}.
 \end{abstract}
 
 \begin{keyword}
 inverse problems \sep physics-informed neural networks \sep rough volatility
-\sep Markovian lift \sep fractional kernels \sep model calibration \sep
-curse of dimensionality \sep scientific machine learning
+\sep Markovian lift \sep model calibration \sep curse of dimensionality \sep
+scientific machine learning
 \end{keyword}
 
 \end{frontmatter}
